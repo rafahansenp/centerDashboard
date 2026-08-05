@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/validate_palette.js \"#2a78d6,#eb6834,#1baf7a,#eda100\" --mode light)",
+      "Bash(node scripts/validate_palette.js \"#3987e5,#d95926,#199e70,#c98500\" --mode dark)",
+      "WebFetch(domain:developers.uappi.com.br)",
+      "WebSearch",
+      "Bash(wc -l)",
+      "Bash(echo 'linhas: __CMDSUB_OUTPUT__')",
+      "Bash(grep -c '^### Task' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(echo 'tasks: __CMDSUB_OUTPUT__')",
+      "Bash(grep -c '^- \\\\[ \\\\] \\\\*\\\\*Step' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(awk 'NR>=9700 && NR<=10120 && /^- \\\\[ \\\\] \\\\*\\\\*Step|^### Task/' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(grep -n 'Consumes: `Ga4Client`' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(awk -F: '$1>17990')",
+      "Bash(grep -n 'bg-viz-\\\\${' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(python3 - /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(perl -0pi -e 's/env: \\\\{ DATABASE_URL: config\\\\.databaseUrl, UAPPI_BASE_URL: config\\\\.uappiBaseUrl/env: { DATABASE_URL: config.databaseUrl, UAPPI_BASE_URL: config.uappiBaseUrl,\\\\n      CREDENTIALS_ENCRYPTION_KEY: config.credentialsEncryptionKey/g' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(grep -n 'Consumes: `UappiClient` \\(T5\\)' /c/centerDashboard/docs/superpowers/plans/2026-08-05-center-analytics-uappi.md)",
+      "Bash(awk '{print $2, $3, $4}')",
+      "Bash(ls \"C:/Users/Rafael/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0/skills/subagent-driven-development/\" \"C:/Users/Rafael/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0/skills/subagent-driven-development/scripts/\" 2>&1)",
+      "Read(//c/Users/Rafael/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0/skills/subagent-driven-development/**)",
+      "Bash(git -c user.name=Rafael -c user.email=app@blan.digital commit -q -m 'docs: planos de execução do Center Analytics *)",
+      "Bash(git checkout *)"
+    ]
+  }
+}
