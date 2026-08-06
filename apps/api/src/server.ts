@@ -4,11 +4,10 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import type { AppDeps } from './deps.js';
 import { registerAuthRoutes } from './auth/routes.js';
+import { registerMetricRoutes } from './routes/metrics.js';
+import { registerAnalysisRoutes } from './routes/analysis.js';
 // As rotas abaixo nascem em tasks futuras. Descomente o import e a chamada de
-// registro correspondente conforme cada task chega — o servidor desta task
-// (T22) só depende de `registerAuthRoutes`.
-// TODO(T23): import { registerMetricRoutes } from './routes/metrics.js';
-// TODO(T23): import { registerAnalysisRoutes } from './routes/analysis.js';
+// registro correspondente conforme cada task chega.
 // TODO(T9):  import { registerAttributionRoutes } from './routes/attribution.js';
 // TODO(T32): import { registerWhatsAppRoutes } from './whatsapp/routes.js';
 // TODO(T34): import { registerLinkRoutes } from './whatsapp/link-routes.js';
@@ -43,8 +42,8 @@ export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/health', async () => ({ status: 'ok' }));
 
   await registerAuthRoutes(app, deps);
-  // TODO(T23): await registerMetricRoutes(app, deps);
-  // TODO(T23): await registerAnalysisRoutes(app, deps);
+  await registerMetricRoutes(app, deps);
+  await registerAnalysisRoutes(app, deps);
   // TODO(T9):  await registerAttributionRoutes(app, deps);
   // TODO(T32): await registerWhatsAppRoutes(app, deps);
   // TODO(T34): await registerLinkRoutes(app, deps);
