@@ -85,7 +85,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
   'PED-0009': {
     idPedido: 9009, numeroPedido: 'PED-0009', canal: 'site', origem: 'organico',
     dataEmissao: '2026-07-13 09:00:00', moeda: 'BRL',
-    status: { id: 8, descricao: 'Estornado' },
+    status: { id: 8, descricao: 'Devolvido' },
     cliente: { idCliente: 508, email: 'henrique.mock@example.com', nomeRazao: 'Henrique (mock)' },
     valores: { subtotal: 159.8, frete: 12.0, descontos: 0, totalPedido: 171.8 },
     pagamento: [{ descricao: 'Boleto', valor: 171.8 }],
