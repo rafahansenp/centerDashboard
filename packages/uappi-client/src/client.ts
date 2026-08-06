@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { RateLimiter } from './rate-limiter.js';
 import type { UappiTokenProvider } from './auth.js';
+import type { UappiClientLike } from './interface.js';
 
 const APP_TOKEN = 'wapstore';
 /** Documentado como máximo por página. */
@@ -50,7 +51,7 @@ export interface UappiClientOptions {
   detailLimiter?: RateLimiter;
 }
 
-export class UappiClient {
+export class UappiClient implements UappiClientLike {
   private readonly baseUrl: string;
   private readonly tokenProvider: UappiTokenProvider;
   private readonly fetchImpl: typeof fetch;
