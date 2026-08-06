@@ -107,11 +107,7 @@ describe('mapOrder — dinheiro', () => {
 describe('mapOrder — dados pessoais', () => {
   it('stores only hashes, never the email or document', () => {
     const { order } = map();
-    const serialized = JSON.stringify({
-      externalId: order.customer?.externalId,
-      emailHash: order.customer?.emailHash,
-      documentHash: order.customer?.documentHash,
-    });
+    const serialized = JSON.stringify(order.customer);
     expect(serialized).not.toContain('Ana@Example.com');
     expect(serialized).not.toContain('ana@example.com');
     expect(serialized).not.toContain('12345678909');
@@ -212,6 +208,20 @@ describe('mapOrder — pagamento e itens', () => {
       itens: [{ sku: 'A', descricao: 'X', quantidade: 1.4, valorUnitario: 10, valorTotal: 14 }],
     });
     expect(items[0]?.quantity).toBe(1);
+  });
+
+  it('preserves a zero quantity instead of clamping it to 1', () => {
+    const { items } = map({
+      itens: [{ sku: 'A', descricao: 'X', quantidade: 0, valorUnitario: 10, valorTotal: 0 }],
+    });
+    expect(items[0]?.quantity).toBe(0);
+  });
+
+  it('preserves a negative quantity instead of clamping it to 1', () => {
+    const { items } = map({
+      itens: [{ sku: 'A', descricao: 'X', quantidade: -2, valorUnitario: 10, valorTotal: -20 }],
+    });
+    expect(items[0]?.quantity).toBe(-2);
   });
 
   it('produces no items when the order has none', () => {

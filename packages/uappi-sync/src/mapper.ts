@@ -158,7 +158,7 @@ export function mapOrder(
     sku: item.sku?.trim() || SKU_PLACEHOLDER,
     productName: item.descricao.trim() || SKU_PLACEHOLDER,
     categoryName: item.categoria?.trim() || null,
-    quantity: Math.max(1, Math.trunc(item.quantidade)),
+    quantity: Math.trunc(item.quantidade),
     unitPriceCents: toCents(item.valorUnitario),
     totalPriceCents: toCents(item.valorTotal),
   }));
