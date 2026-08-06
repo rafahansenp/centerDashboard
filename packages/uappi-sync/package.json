@@ -16,6 +16,7 @@
     "@center/shared": "workspace:*",
     "@center/pii": "workspace:*",
     "@center/uappi-client": "workspace:*",
+    "@prisma/client": "^6.1.0",
     "zod": "^3.24.1"
   }
 }
