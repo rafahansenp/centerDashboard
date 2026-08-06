@@ -1,0 +1,21 @@
+{
+  "name": "@center/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@center/shared": "workspace:*",
+    "@center/pii": "workspace:*",
+    "@prisma/client": "^6.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": { "prisma": "^6.1.0" }
+}

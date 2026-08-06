@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+/// Agrupamento normalizado de status. O texto do status é configurável na Uappi
+/// por loja; agrupamos para que "cancelados" e "aguardando pagamento" sejam
+/// perguntáveis sem depender do vocabulário de cada cliente.
+enum OrderStatusGroup {
+  PAID
+  PENDING_PAYMENT
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  FAILED
+  OTHER
+}
+
+model Organization {
+  id                String   @id @default(cuid())
+  name              String
+  uappiApiKey       String?
+  uappiSecretKey    String?
+  ga4PropertyId     String?
+  ga4BigQueryDataset String?
+  /// Sobrescreve o mapa padrão de status da Uappi: { "<idStatus>": "PAID", ... }
+  statusMapping     Json?
+  createdAt         DateTime @default(now())
+
+  users              User[]
+  whatsappIdentities WhatsAppIdentity[]
+  conversations      Conversation[]
+  toolCallLogs       ToolCallLog[]
+  orders             CommerceOrder[]
+  orderItems         CommerceOrderItem[]
+  customers          CommerceCustomer[]
+  attributionTouches AttributionTouch[]
+  syncStates         SyncState[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  role           Role     @default(VIEWER)
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  whatsappIdentity WhatsAppIdentity?
+  linkCodes        LinkCode[]
+
+  @@index([organizationId])
+}
+
+model WhatsAppIdentity {
+  id             String    @id @default(cuid())
+  phoneE164      String    @unique
+  userId         String    @unique
+  organizationId String
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([organizationId])
+}
+
+model LinkCode {
+  code      String    @id
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Conversation {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  whatsappIdentityId String
+  lastMessageAt      DateTime @default(now())
+  createdAt          DateTime @default(now())
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  whatsappIdentity WhatsAppIdentity @relation(fields: [whatsappIdentityId], references: [id], onDelete: Cascade)
+  messages         Message[]
+
+  @@index([whatsappIdentityId, lastMessageAt])
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String      @db.Text
+  createdAt      DateTime    @default(now())
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  toolCallLogs ToolCallLog[]
+
+  @@index([conversationId, createdAt])
+}
+
+model ToolCallLog {
+  id             String   @id @default(cuid())
+  messageId      String?
+  organizationId String
+  toolName       String
+  input          Json
+  durationMs     Int
+  success        Boolean
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
+
+model ProcessedWebhookEvent {
+  wamid       String   @id
+  processedAt DateTime @default(now())
+}
+
+// ─────────────────────────── READ MODEL DE E-COMMERCE ───────────────────────────
+// Alimentado pelo sync da Uappi. NUNCA escrito por outra coisa.
+
+model CommerceOrder {
+  id             String           @id @default(cuid())
+  organizationId String
+  /// Chave natural na Uappi.
+  numeroPedido   String
+  idPedido       String
+  statusLabel    String
+  statusId       Int
+  statusGroup    OrderStatusGroup
+  canal          String?
+  origem         String?
+  tipoVenda      String?
+  emittedAt      DateTime
+  /// Todos os valores em CENTAVOS.
+  subtotalCents  Int
+  freightCents   Int
+  discountCents  Int
+  totalCents     Int
+  currency       String           @default("BRL")
+  paymentMethod  String?
+  customerId     String?
+
+  /// Atribuição capturada no checkout (T9). Nulo quando o pedido veio de fora do site.
+  attributionSource   String?
+  attributionMedium   String?
+  attributionCampaign String?
+  attributionDevice   String?
+  /// HMAC do client_id do GA4. Nunca o valor original.
+  visitorHash         String?
+
+  /// Payload cru da Uappi, para reprocessar sem chamar a API de novo.
+  rawPayload Json
+  syncedAt   DateTime @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     CommerceCustomer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items        CommerceOrderItem[]
+
+  @@unique([organizationId, numeroPedido])
+  @@index([organizationId, emittedAt])
+  @@index([organizationId, statusGroup, emittedAt])
+  @@index([organizationId, attributionCampaign, emittedAt])
+  @@index([organizationId, visitorHash])
+}
+
+model CommerceOrderItem {
+  id             String @id @default(cuid())
+  organizationId String
+  orderId        String
+  sku            String
+  productName    String
+  categoryName   String?
+  quantity       Int
+  unitPriceCents Int
+  totalPriceCents Int
+  /// Desnormalizado do pedido: permite agregar por período sem join.
+  emittedAt      DateTime
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        CommerceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, sku, emittedAt])
+  @@index([organizationId, categoryName, emittedAt])
+  @@index([orderId])
+}
+
+model CommerceCustomer {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// idCliente da Uappi. Não é dado pessoal.
+  externalId     String
+  /// HMAC. Nunca o e-mail ou documento em claro.
+  emailHash      String?
+  documentHash   String?
+  firstOrderAt   DateTime?
+  lastOrderAt    DateTime?
+  ordersCount    Int       @default(0)
+  totalSpentCents Int      @default(0)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orders       CommerceOrder[]
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, firstOrderAt])
+  @@index([organizationId, emailHash])
+}
+
+/// Toque de atribuição gravado pelo snippet do checkout (T9), antes do pedido
+/// existir. O sync casa por visitorHash quando o pedido chega.
+model AttributionTouch {
+  id             String   @id @default(cuid())
+  organizationId String
+  visitorHash    String
+  emailHash      String?
+  source         String?
+  medium         String?
+  campaign       String?
+  device         String?
+  landingPage    String?
+  occurredAt     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, visitorHash, occurredAt])
+  @@index([organizationId, emailHash, occurredAt])
+}
+
+/// Estado do sincronizador. Uma linha por organização e recurso.
+model SyncState {
+  id             String    @id @default(cuid())
+  organizationId String
+  resource       String
+  /// Última janela de dataEmissao já sincronizada, em YYYY-MM-DD.
+  cursorDate     String?
+  lastSyncedAt   DateTime?
+  backfillDoneAt DateTime?
+  lastError      String?
+  ordersSynced   Int       @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, resource])
+}
