@@ -112,6 +112,31 @@ function mapCustomer(order: UappiOrder, pseudonymizer: Pseudonymizer): MappedCus
   };
 }
 
+const PII_REDACTED = '[REDACTED]';
+const CUSTOMER_PII_KEYS = ['email', 'documento', 'nomeRazao'] as const;
+
+/**
+ * `rawPayload` guarda o pedido inteiro para reprocessamento offline, mas
+ * `order.cliente` (schema `.passthrough()`) carrega e-mail, documento e
+ * razão social em claro — dado pessoal que não pode ir para o banco. Devolve
+ * uma cópia do pedido com só esses três campos redigidos; tudo o mais
+ * (itens, valores, status, pagamento, informacoesAdicionais e os demais
+ * campos de `cliente`, como `idCliente`) permanece intacto para reprocessamento.
+ * Não muta `order`: quem já leu `order.cliente.email`/`documento` para hash
+ * continua vendo os valores reais.
+ */
+function redactRawPayload(order: UappiOrder): unknown {
+  const customer = order.cliente as Record<string, unknown> | undefined;
+  if (!customer) return order;
+
+  const redactedCustomer: Record<string, unknown> = { ...customer };
+  for (const key of CUSTOMER_PII_KEYS) {
+    if (key in redactedCustomer) redactedCustomer[key] = PII_REDACTED;
+  }
+
+  return { ...order, cliente: redactedCustomer };
+}
+
 function mapAttribution(order: UappiOrder, pseudonymizer: Pseudonymizer): MappedAttribution {
   const extra = order.informacoesAdicionais as Record<string, unknown> | undefined;
   const visitorId = readString(extra, 'centerVisitorId', 'center_visitor_id', 'clientId', 'client_id');
@@ -149,7 +174,7 @@ export function mapOrder(
     paymentMethod: order.pagamento[0]?.descricao?.trim() || null,
     customer: mapCustomer(order, deps.pseudonymizer),
     attribution: mapAttribution(order, deps.pseudonymizer),
-    rawPayload: order,
+    rawPayload: redactRawPayload(order),
   };
 
   const items: MappedOrderItem[] = order.itens.map((item) => ({

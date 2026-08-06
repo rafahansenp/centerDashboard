@@ -13,7 +13,7 @@ const rawOrder = {
   dataEmissao: '2026-07-15 14:30:00',
   moeda: 'BRL',
   status: { id: 3, descricao: 'Pagamento aprovado' },
-  cliente: { idCliente: 555, email: 'Ana@Example.com', documento: '123.456.789-09' },
+  cliente: { idCliente: 555, email: 'Ana@Example.com', documento: '123.456.789-09', nomeRazao: 'Ana Silva Souza' },
   valores: { subtotal: 200.0, frete: 20.5, descontos: 10.0, totalPedido: 210.5 },
   pagamento: [{ idPagamento: 1, descricao: 'Cartão de crédito', valor: 210.5 }],
   itens: [
@@ -233,5 +233,24 @@ describe('mapOrder — preservação do payload', () => {
   it('keeps the whole raw order so it can be reprocessed offline', () => {
     const { order } = map();
     expect((order.rawPayload as Record<string, unknown>).numeroPedido).toBe('PED-2026-0001');
+  });
+
+  it('redacts customer PII in rawPayload while preserving the rest for reprocessing', () => {
+    const { order } = map();
+    const serialized = JSON.stringify(order.rawPayload);
+
+    // Nem e-mail, nem documento, nem razão social em claro.
+    expect(serialized).not.toContain('Ana@Example.com');
+    expect(serialized).not.toContain('ana@example.com');
+    expect(serialized).not.toContain('123.456.789-09');
+    expect(serialized).not.toContain('12345678909');
+    expect(serialized).not.toContain('Ana Silva Souza');
+
+    // O resto do payload sobrevive intacto — a redação não pode esvaziar tudo.
+    expect(serialized).toContain('PED-2026-0001');
+    expect(serialized).toContain('CAM-001');
+    const payload = order.rawPayload as { cliente?: { idCliente?: unknown; email?: unknown } };
+    expect(payload.cliente?.idCliente).toBe(555);
+    expect(payload.cliente?.email).toBe('[REDACTED]');
   });
 });
