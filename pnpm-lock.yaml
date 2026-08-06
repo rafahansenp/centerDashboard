@@ -49,6 +49,25 @@ importers:
         specifier: ^6.1.0
         version: 6.19.3(typescript@5.9.3)
 
+  packages/mcp-commerce:
+    dependencies:
+      '@center/mcp-core':
+        specifier: workspace:*
+        version: link:../mcp-core
+      '@center/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@prisma/client':
+        specifier: ^6.1.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
+
   packages/mcp-core:
     dependencies:
       '@center/shared':

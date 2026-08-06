@@ -16,5 +16,8 @@
     "@center/shared": "workspace:*",
     "@prisma/client": "^6.1.0",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1"
   }
 }
