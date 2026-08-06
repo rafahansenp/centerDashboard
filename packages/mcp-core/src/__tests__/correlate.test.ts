@@ -124,6 +124,28 @@ describe('correlateMetrics', () => {
     expect(result.buckets).toBe(3);
   });
 
+  it('pairs by date, not by array position, when the shared dates are not a prefix', async () => {
+    const revenue = series('commerce.revenue', [100, 200, 300, 400, 500], 'currency');
+    // Only 2026-02-02, -03 and -05 survive — a positional zip of the first 3
+    // points from each series would silently pair 01/02/03 instead.
+    const sparse: MetricSeries = {
+      ...revenue,
+      points: [revenue.points[1]!, revenue.points[2]!, revenue.points[4]!],
+      total: 200 + 300 + 500,
+    };
+    const { gateway } = fakeGateway({
+      'ga4.active_users': series('ga4.active_users', [10, 20, 30, 40, 50]),
+      'commerce.revenue': sparse,
+    });
+    const result = await correlateMetrics(gateway, input);
+    expect(result.buckets).toBe(3);
+    expect(result.series).toEqual([
+      { date: '2026-02-02', valueA: 20, valueB: 200 },
+      { date: '2026-02-03', valueA: 30, valueB: 300 },
+      { date: '2026-02-05', valueA: 50, valueB: 500 },
+    ]);
+  });
+
   it('returns an indeterminate result when a metric never changes', async () => {
     const { gateway } = fakeGateway({
       'ga4.active_users': series('ga4.active_users', [10, 20, 30, 40, 50]),
