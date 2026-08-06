@@ -260,4 +260,65 @@ describe('POST /api/analysis/correlate', () => {
     expect(response.statusCode).toBe(400);
     await app.close();
   });
+
+  it('rejects an inverted date range with 400', async () => {
+    const { app, token } = await setup();
+    const response = await app.inject({
+      method: 'POST', url: '/api/analysis/correlate', headers: auth(token),
+      payload: {
+        metricIdA: 'ga4.active_users', metricIdB: 'commerce.revenue',
+        from: '2026-02-01', to: '2026-01-01', granularity: 'day',
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    await app.close();
+  });
+});
+
+describe('POST /api/analysis/app-version-impact', () => {
+  const validImpactBody = { version: '5.8.0', releaseDate: '2026-01-01' };
+
+  it('requires a token', async () => {
+    const { app } = await setup();
+    const response = await app.inject({
+      method: 'POST', url: '/api/analysis/app-version-impact', payload: validImpactBody,
+    });
+    expect(response.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('returns the impact comparison for a valid version/releaseDate', async () => {
+    const { app, gateway, token } = await setup();
+    (gateway.queryBatch as jest.Mock)
+      .mockResolvedValueOnce([
+        { ...series, metricId: 'commerce.revenue', total: 100000 },
+        { ...series, metricId: 'commerce.orders', total: 50 },
+        { ...series, metricId: 'ga4.active_users', total: 1000 },
+      ])
+      .mockResolvedValueOnce([
+        { ...series, metricId: 'commerce.revenue', total: 150000 },
+        { ...series, metricId: 'commerce.orders', total: 60 },
+        { ...series, metricId: 'ga4.active_users', total: 1200 },
+      ]);
+    const response = await app.inject({
+      method: 'POST', url: '/api/analysis/app-version-impact', headers: auth(token),
+      payload: validImpactBody,
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.version).toBe('5.8.0');
+    expect(body.revenueDelta).toBe(50000);
+    expect(body.caveat).toBeTruthy();
+    await app.close();
+  });
+
+  it('rejects a release date in the future with 400', async () => {
+    const { app, token } = await setup();
+    const response = await app.inject({
+      method: 'POST', url: '/api/analysis/app-version-impact', headers: auth(token),
+      payload: { version: '5.8.0', releaseDate: '2099-01-01' },
+    });
+    expect(response.statusCode).toBe(400);
+    await app.close();
+  });
 });

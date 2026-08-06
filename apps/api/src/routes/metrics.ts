@@ -45,9 +45,9 @@ type QueryBody = z.infer<typeof QueryBodySchema>;
 
 const BatchBodySchema = z.object({ queries: z.array(QueryBodySchema).min(1).max(MAX_BATCH_SIZE) });
 
-class BadRequestError extends Error {}
+export class BadRequestError extends Error {}
 
-function assertRange(body: { from: string; to: string }): void {
+export function assertRange(body: { from: string; to: string }): void {
   if (body.from > body.to) {
     throw new BadRequestError(`"from" (${body.from}) é anterior a "to" (${body.to})`);
   }
@@ -62,11 +62,18 @@ export function badRequest(reply: FastifyReply, message: string) {
   return reply.status(400).send({ error: 'bad_request', message });
 }
 
-/** Falha de fonte externa é 502 (problema deles), não 500 (problema nosso). */
+/**
+ * Falha de fonte externa é 502 (problema deles), não 500 (problema nosso).
+ *
+ * A mensagem enviada ao cliente é sempre genérica — nunca a mensagem crua do
+ * erro, que pode vazar detalhes internos (stack traces, nomes de tabela,
+ * caminhos de arquivo). O erro real é logado no servidor para diagnóstico.
+ */
 export function upstreamError(reply: FastifyReply, error: unknown) {
+  reply.log.error({ err: error }, 'falha na fonte externa');
   return reply.status(502).send({
     error: 'upstream_error',
-    message: error instanceof Error ? error.message : 'fonte de dados indisponível',
+    message: 'fonte de dados indisponível',
   });
 }
 

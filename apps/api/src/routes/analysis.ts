@@ -5,7 +5,7 @@ import { correlateMetrics } from '@center/mcp-core';
 import { requireAuth } from '../auth/jwt.js';
 import { resolveTenant } from '../tenant.js';
 import { analyzeAppVersionImpact } from '../analysis/app-version-impact.js';
-import { badRequest, upstreamError } from './metrics.js';
+import { badRequest, upstreamError, assertRange, BadRequestError } from './metrics.js';
 import type { AppDeps } from '../deps.js';
 
 const BUSINESS_TIME_ZONE = 'America/Sao_Paulo';
@@ -34,9 +34,11 @@ export async function registerAnalysisRoutes(app: FastifyInstance, deps: AppDeps
     if (!parsed.success) return badRequest(reply, parsed.error.issues[0]?.message ?? 'corpo inválido');
 
     try {
+      assertRange(parsed.data);
       const tenant = await resolveTenant(deps.prisma, request.auth.organizationId);
       return reply.send(await correlateMetrics(deps.gateway, { ...parsed.data, tenant }));
     } catch (error) {
+      if (error instanceof BadRequestError) return badRequest(reply, error.message);
       // "métrica com ela mesma" é erro do cliente, não da fonte.
       if (error instanceof Error && error.message.includes('ela mesma')) {
         return badRequest(reply, error.message);
