@@ -32,6 +32,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@center/mcp-core':
+        specifier: workspace:*
+        version: link:../../packages/mcp-core
       '@center/pii':
         specifier: workspace:*
         version: link:../../packages/pii
