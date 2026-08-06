@@ -14,7 +14,12 @@ import { registerAuthRoutes } from './auth/routes.js';
 // TODO(T34): import { registerLinkRoutes } from './whatsapp/link-routes.js';
 
 export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+  // `trustProxy` faz `request.ip` refletir `x-forwarded-for` em vez do
+  // socket cru. Sem isso, atrás de qualquer load balancer/ingress em
+  // produção, o rate limit do login (chave = request.ip) colapsa TODOS os
+  // clientes num único balde — um atacante zera as tentativas de qualquer
+  // usuário legítimo.
+  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
   // O corpo cru é necessário para validar a assinatura do webhook do WhatsApp
   // (T32). Guardamos aqui, no único ponto onde o buffer ainda existe.

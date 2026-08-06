@@ -66,13 +66,25 @@ describe('POST /auth/login', () => {
   });
 
   it('gives the same 401 for an unknown email (no user enumeration)', async () => {
-    const app = await buildTestServer(null);
-    const response = await app.inject({
+    const unknownApp = await buildTestServer(null);
+    const unknownResponse = await unknownApp.inject({
       method: 'POST', url: '/auth/login',
       payload: { email: 'ninguem@example.com', password: 'qualquer' },
     });
-    expect(response.json().message).toBe('credenciais inválidas');
-    await app.close();
+    await unknownApp.close();
+
+    const knownApp = await buildTestServer({ ...validUser, passwordHash: await hashPassword('segredo123') });
+    const wrongPasswordResponse = await knownApp.inject({
+      method: 'POST', url: '/auth/login',
+      payload: { email: 'ana@example.com', password: 'errada' },
+    });
+    await knownApp.close();
+
+    expect(unknownResponse.statusCode).toBe(401);
+    expect(wrongPasswordResponse.statusCode).toBe(401);
+    // Corpo byte-a-byte idêntico: nada (nem tamanho, nem campo extra)
+    // distingue "email não existe" de "senha errada".
+    expect(unknownResponse.body).toBe(wrongPasswordResponse.body);
   });
 
   it('rejects a malformed body with 400', async () => {
@@ -91,6 +103,23 @@ describe('POST /auth/login', () => {
     });
     for (let i = 0; i < 10; i += 1) expect((await attempt()).statusCode).toBe(401);
     expect((await attempt()).statusCode).toBe(429);
+    await app.close();
+  });
+
+  it('keys the rate limit by client address, not globally (requires trustProxy)', async () => {
+    const app = await buildTestServer(null);
+    const attemptFrom = (xForwardedFor: string) => app.inject({
+      method: 'POST', url: '/auth/login',
+      headers: { 'x-forwarded-for': xForwardedFor },
+      payload: { email: 'ana@example.com', password: 'errada' },
+    });
+
+    // Address A exhausts its bucket.
+    for (let i = 0; i < 10; i += 1) expect((await attemptFrom('198.51.100.1')).statusCode).toBe(401);
+    expect((await attemptFrom('198.51.100.1')).statusCode).toBe(429);
+
+    // Address B is unaffected: still gets a normal 401, not 429.
+    expect((await attemptFrom('198.51.100.2')).statusCode).toBe(401);
     await app.close();
   });
 });
