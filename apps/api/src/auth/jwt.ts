@@ -36,3 +36,10 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply):
     await reply.status(401).send({ error: 'unauthorized', message: 'token ausente ou inválido' });
   }
 }
+
+/** Roda depois de `requireAuth`. Barra qualquer papel que não seja ADMIN. */
+export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (request.auth.role !== 'ADMIN') {
+    await reply.status(403).send({ error: 'forbidden', message: 'requer papel de administrador' });
+  }
+}
