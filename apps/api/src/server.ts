@@ -10,7 +10,7 @@ import { registerAnalysisRoutes } from './routes/analysis.js';
 // registro correspondente conforme cada task chega.
 import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerSettingsRoutes } from './routes/settings.js';
-// TODO(T32): import { registerWhatsAppRoutes } from './whatsapp/routes.js';
+import { registerWhatsAppRoutes } from './whatsapp/routes.js';
 // TODO(T34): import { registerLinkRoutes } from './whatsapp/link-routes.js';
 
 export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
@@ -47,7 +47,7 @@ export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
   await registerAnalysisRoutes(app, deps);
   await registerAttributionRoutes(app, deps);
   await registerSettingsRoutes(app, deps);
-  // TODO(T32): await registerWhatsAppRoutes(app, deps);
+  await registerWhatsAppRoutes(app, deps);
   // TODO(T34): await registerLinkRoutes(app, deps);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
