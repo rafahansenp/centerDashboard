@@ -17,10 +17,23 @@ const inboundPayload = {
 
 async function setup(alreadyProcessed = false, enqueueImpl?: jest.Mock) {
   const enqueue = enqueueImpl ?? jest.fn(async () => {});
+  // Estado real (não só mocks fixos): create/delete realmente afetam o que
+  // findUnique subsequente enxerga, para poder testar o ciclo completo de
+  // "marca -> reverte -> reentrega tenta de novo" do fix da falha de enqueue.
+  const processed = new Set<string>(alreadyProcessed ? ['wamid.ABC'] : []);
   const prisma = {
     processedWebhookEvent: {
-      findUnique: jest.fn(async () => (alreadyProcessed ? { wamid: 'wamid.ABC' } : null)),
-      create: jest.fn(async () => ({ wamid: 'wamid.ABC' })),
+      findUnique: jest.fn(async ({ where }: { where: { wamid: string } }) => (
+        processed.has(where.wamid) ? { wamid: where.wamid } : null
+      )),
+      create: jest.fn(async ({ data }: { data: { wamid: string } }) => {
+        processed.add(data.wamid);
+        return { wamid: data.wamid };
+      }),
+      delete: jest.fn(async ({ where }: { where: { wamid: string } }) => {
+        processed.delete(where.wamid);
+        return { wamid: where.wamid };
+      }),
     },
   } as unknown as PrismaClient;
 
@@ -31,7 +44,7 @@ async function setup(alreadyProcessed = false, enqueueImpl?: jest.Mock) {
     secretBox: new SecretBox(testConfig.credentialsEncryptionKey),
     queue: { enqueue },
   });
-  return { app, enqueue };
+  return { app, enqueue, prisma, processed };
 }
 
 function post(app: Awaited<ReturnType<typeof buildServer>>, payload: unknown, secret = 's') {
@@ -133,4 +146,62 @@ describe('POST /webhooks/whatsapp', () => {
     expect((await post(app, inboundPayload)).statusCode).toBe(200);
     await app.close();
   });
+
+  it('reverts the processed-event mark when enqueuing fails, so a redelivery can retry', async () => {
+    const enqueue = jest.fn(async () => { throw new Error('redis fora do ar'); });
+    const { app, prisma, processed } = await setup(false, enqueue);
+
+    expect((await post(app, inboundPayload)).statusCode).toBe(200);
+    // O evento foi marcado como processado e depois revertido — não pode
+    // sobrar registrado, senão a mensagem se perde para sempre (a Meta nunca
+    // reentrega um 200).
+    expect(prisma.processedWebhookEvent.delete).toHaveBeenCalledWith({ where: { wamid: 'wamid.ABC' } });
+    expect(processed.has('wamid.ABC')).toBe(false);
+
+    // Uma reentrega idêntica da Meta (mesmo wamid) deve tentar enfileirar de
+    // novo, não ser silenciosamente descartada como duplicata.
+    enqueue.mockImplementationOnce(async () => {});
+    expect((await post(app, inboundPayload)).statusCode).toBe(200);
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(processed.has('wamid.ABC')).toBe(true);
+
+    await app.close();
+  });
+});
+
+describe('rate limiting on /webhooks/whatsapp', () => {
+  it('never 429s the webhook, even under a flood of unsigned requests spoofing a real Meta delivery IP', async () => {
+    const { app } = await setup();
+    // 31.13.115.1 é um IP de entrega real e publicado da Meta — o cenário do
+    // achado de segurança é um atacante forjando X-Forwarded-For com esse
+    // valor. Sem o allowList, isto esgotaria o balde global de 300/min
+    // compartilhado por IP (habilitado via trustProxy) e derrubaria a
+    // entrega legítima de mensagens.
+    const spoofedMetaIp = '31.13.115.1';
+    const unsigned = () => app.inject({
+      method: 'POST', url: '/webhooks/whatsapp',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': spoofedMetaIp },
+      payload: Buffer.from(JSON.stringify(inboundPayload)),
+    });
+
+    for (let i = 0; i < 305; i += 1) {
+      expect((await unsigned()).statusCode).toBe(401);
+    }
+
+    // Uma requisição legitimamente assinada, aparentando vir do mesmo IP,
+    // ainda deve passar — não pode ter sido pega pelo rate limit.
+    const raw = Buffer.from(JSON.stringify(inboundPayload));
+    const signedFromSameIp = await app.inject({
+      method: 'POST', url: '/webhooks/whatsapp',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': spoofedMetaIp,
+        'x-hub-signature-256': signPayload(raw, 's'),
+      },
+      payload: raw,
+    });
+    expect(signedFromSameIp.statusCode).toBe(200);
+
+    await app.close();
+  }, 20000);
 });

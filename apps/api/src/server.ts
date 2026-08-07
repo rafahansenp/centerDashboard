@@ -37,7 +37,14 @@ export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(jwt, { secret: deps.config.jwtSecret });
   await app.register(rateLimit, {
     global: true, max: 300, timeWindow: '1 minute',
-    allowList: (request) => request.url === '/health',
+    // O webhook do WhatsApp tem a assinatura HMAC como sua ÚNICA fronteira de
+    // segurança (ver whatsapp/signature.ts) — não pode também ficar sujeito a
+    // um limitador cuja chave (request.ip, via trustProxy) é o header
+    // X-Forwarded-For, trivialmente forjável. Sem este allowList, um
+    // atacante forjando o IP de entrega da Meta consegue esgotar o balde e
+    // derrubar a entrega legítima de mensagens (a Meta desativa o webhook
+    // após falhas repetidas).
+    allowList: (request) => request.url === '/health' || request.url.startsWith('/webhooks/whatsapp'),
   });
 
   app.get('/health', async () => ({ status: 'ok' }));

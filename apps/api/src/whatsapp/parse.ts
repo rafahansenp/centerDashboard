@@ -8,42 +8,59 @@ export interface InboundMessage {
 }
 
 /**
- * Schema deliberadamente frouxo: a Meta adiciona campos sem aviso e envia
- * dezenas de tipos de evento. Aceitamos qualquer forma e extraímos apenas
- * mensagens de texto; tudo mais é ignorado em silêncio.
+ * Envelope deliberadamente frouxo: a Meta adiciona campos sem aviso e envia
+ * dezenas de tipos de evento. Valida só a forma de navegação (entry/changes/
+ * value) — cada mensagem individual é validada separadamente em
+ * `parseInboundMessages`, para que uma mensagem malformada num lote não
+ * derrube as demais mensagens (boas) do mesmo lote.
  */
-const PayloadSchema = z.object({
+const EnvelopeSchema = z.object({
   entry: z.array(z.object({
     changes: z.array(z.object({
       value: z.object({
-        messages: z.array(z.object({
-          from: z.string(),
-          id: z.string(),
-          timestamp: z.string(),
-          type: z.string(),
-          text: z.object({ body: z.string() }).optional(),
-        })).optional(),
+        messages: z.array(z.unknown()).optional(),
       }).passthrough(),
     }).passthrough()).optional(),
   }).passthrough()).optional(),
 }).passthrough();
 
+const MessageSchema = z.object({
+  from: z.string(),
+  id: z.string(),
+  timestamp: z.string(),
+  type: z.string(),
+  text: z.object({ body: z.string() }).optional(),
+});
+
 export function parseInboundMessages(payload: unknown): InboundMessage[] {
-  const parsed = PayloadSchema.safeParse(payload);
+  const parsed = EnvelopeSchema.safeParse(payload);
   if (!parsed.success) return [];
 
   const messages: InboundMessage[] = [];
   for (const entry of parsed.data.entry ?? []) {
     for (const change of entry.changes ?? []) {
-      for (const message of change.value.messages ?? []) {
+      for (const rawMessage of change.value.messages ?? []) {
+        // Cada mensagem é validada isoladamente: uma mensagem com formato
+        // inesperado é ignorada em silêncio, sem afetar as demais do lote.
+        const messageParsed = MessageSchema.safeParse(rawMessage);
+        if (!messageParsed.success) continue;
+        const message = messageParsed.data;
+
         if (message.type !== 'text') continue;
         const text = message.text?.body.trim() ?? '';
         if (text === '') continue;
+
+        const timestamp = Number(message.timestamp);
+        // Um timestamp que não converte para número finito indicaria um NaN
+        // gravado silenciosamente no processamento a jusante — tratamos como
+        // mensagem malformada, igual a um corpo vazio.
+        if (!Number.isFinite(timestamp)) continue;
+
         messages.push({
           wamid: message.id,
           fromPhoneE164: message.from.startsWith('+') ? message.from : `+${message.from}`,
           text,
-          timestamp: Number(message.timestamp),
+          timestamp,
         });
       }
     }

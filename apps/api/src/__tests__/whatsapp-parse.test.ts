@@ -71,4 +71,23 @@ describe('parseInboundMessages', () => {
       ...textMessage, messages: [{ ...textMessage.messages[0], from: '+5511988887777' }],
     }))[0]?.fromPhoneE164).toBe('+5511988887777');
   });
+
+  it('keeps a well-formed message when a sibling message in the same batch is malformed', () => {
+    const payload = payloadWith({
+      ...textMessage,
+      messages: [
+        { ...textMessage.messages[0], id: 'wamid.GOOD', text: { body: 'oi' } },
+        // timestamp como número (não string) — formato inesperado que não
+        // deve derrubar o lote inteiro, só esta mensagem.
+        { ...textMessage.messages[0], id: 'wamid.BAD', timestamp: 1773532800, text: { body: 'oi de novo' } },
+      ],
+    });
+    expect(parseInboundMessages(payload).map((m) => m.wamid)).toEqual(['wamid.GOOD']);
+  });
+
+  it('ignores a message with a non-numeric timestamp instead of producing NaN', () => {
+    expect(parseInboundMessages(payloadWith({
+      ...textMessage, messages: [{ ...textMessage.messages[0], timestamp: 'não é um número' }],
+    }))).toEqual([]);
+  });
 });

@@ -39,6 +39,12 @@ export async function registerWhatsAppRoutes(app: FastifyInstance, deps: AppDeps
     }
 
     for (const message of parseInboundMessages(request.body)) {
+      // `create` antes de `enqueue` (nunca o contrário): é essa ordem que
+      // resolve a corrida de duas entregas simultâneas do mesmo wamid — a
+      // que perde o `create` recebe uma violação de unique constraint
+      // (wamid é @id), cai no catch abaixo e nunca chega a enfileirar de
+      // novo. Inverter a ordem reabriria essa corrida.
+      let marked = false;
       try {
         // Idempotência: a Meta reenvia o mesmo evento em caso de timeout.
         const seen = await deps.prisma.processedWebhookEvent.findUnique({
@@ -49,11 +55,28 @@ export async function registerWhatsAppRoutes(app: FastifyInstance, deps: AppDeps
           continue;
         }
         await deps.prisma.processedWebhookEvent.create({ data: { wamid: message.wamid } });
+        marked = true;
         await deps.queue.enqueue(message);
       } catch (error) {
         // Nunca devolvemos erro à Meta: 4xx/5xx gera reentrega em laço e, depois
         // de várias falhas, a Meta desativa o webhook.
         request.log.error({ err: error, wamid: message.wamid }, 'falha ao enfileirar mensagem');
+
+        if (marked) {
+          // O evento já tinha sido marcado como processado quando o
+          // enfileiramento falhou — sem desfazer isso, a Meta veria 200 e
+          // nunca reentregaria, perdendo a mensagem para sempre. Reverte a
+          // marca para que uma reentrega futura do mesmo wamid tente
+          // enfileirar de novo.
+          try {
+            await deps.prisma.processedWebhookEvent.delete({ where: { wamid: message.wamid } });
+          } catch (deleteError) {
+            request.log.error(
+              { err: deleteError, wamid: message.wamid },
+              'falha ao reverter registro de evento processado após falha no enfileiramento',
+            );
+          }
+        }
       }
     }
 
