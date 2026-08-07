@@ -11,7 +11,7 @@ import { registerAnalysisRoutes } from './routes/analysis.js';
 import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerWhatsAppRoutes } from './whatsapp/routes.js';
-// TODO(T34): import { registerLinkRoutes } from './whatsapp/link-routes.js';
+import { registerLinkRoutes } from './whatsapp/link-routes.js';
 
 export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
   // `trustProxy` faz `request.ip` refletir `x-forwarded-for` em vez do
@@ -55,7 +55,7 @@ export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
   await registerAttributionRoutes(app, deps);
   await registerSettingsRoutes(app, deps);
   await registerWhatsAppRoutes(app, deps);
-  // TODO(T34): await registerLinkRoutes(app, deps);
+  await registerLinkRoutes(app, deps);
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const statusCode = error.statusCode ?? 500;
