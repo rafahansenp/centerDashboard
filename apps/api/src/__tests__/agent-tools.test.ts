@@ -171,6 +171,54 @@ describe('ranking', () => {
     ) as Record<string, unknown>;
     expect(result.erro).toMatch(/produtos_mais_vendidos/);
   });
+
+  it('computes a real total from the groups for a ranking whose payload has no top-level total, instead of counting rows', async () => {
+    const gateway = buildGateway({
+      callTool: jest.fn(async () => ({
+        from: '2026-02-01', to: '2026-02-28',
+        groups: [
+          { group: 'PAID', label: 'Pago', orders: 300, revenueCents: 9000000, share: 300 / 340 },
+          { group: 'CANCELLED', label: 'Cancelado', orders: 40, revenueCents: 500000, share: 40 / 340 },
+        ],
+      })),
+    });
+    const result = await tools(gateway).ranking.execute!(
+      { tipo: 'situacao_dos_pedidos', periodo: 'mês passado' }, {} as never,
+    ) as Record<string, unknown>;
+    // 340 pedidos no total, não 2 (a quantidade de grupos/linhas).
+    expect(result.total).toBe(340);
+  });
+
+  it('omits total rather than guessing when the payload has no total and no known way to compute one', async () => {
+    const gateway = buildGateway({
+      callTool: jest.fn(async () => ({
+        from: '2026-02-01', to: '2026-02-28',
+        methods: [
+          { method: 'pix', paidOrders: 120, failedOrders: 5, conversionRate: 0.96, revenueCents: 3000000, averageTicketCents: 25000 },
+        ],
+      })),
+    });
+    const result = await tools(gateway).ranking.execute!(
+      { tipo: 'meios_de_pagamento', periodo: 'mês passado' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result).not.toHaveProperty('total');
+  });
+
+  it('flags the currency notice when rows carry cents fields even though the ranking\'s primary unit is not currency', async () => {
+    const gateway = buildGateway({
+      callTool: jest.fn(async () => ({
+        dimension: 'campaign', from: '2026-02-01', to: '2026-02-28', total: 0.42, unit: 'ratio',
+        rows: [
+          { key: 'blackfriday', label: 'blackfriday', value: 0.3, unit: 'ratio',
+            extra: { revenueCents: 500000, averageTicketCents: 12000 }, share: 1 },
+        ],
+      })),
+    });
+    const result = await tools(gateway).ranking.execute!(
+      { tipo: 'campanhas_com_recorrentes', periodo: 'mês passado' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result.observacao).toMatch(/centavos/i);
+  });
 });
 
 describe('correlacionar', () => {

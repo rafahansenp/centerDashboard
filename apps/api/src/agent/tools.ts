@@ -54,6 +54,52 @@ const RANKINGS: Record<string, { source: MetricSource; tool: string; descricao: 
 const RANKING_NAMES = Object.keys(RANKINGS);
 
 /**
+ * Nem toda ferramenta de ranking devolve um total agregado do período —
+ * `orders_by_status` e `payment_method_performance` só trazem os grupos.
+ * `rows.length` (quantidade de linhas exibidas) NÃO é o total: para
+ * `situacao_dos_pedidos`, por exemplo, seria a quantidade de status
+ * distintos (ex.: 4), não a quantidade de pedidos (ex.: 340).
+ *
+ * Quando existe uma soma correta calculável a partir dos dados, calculamos;
+ * quando não existe uma definição inequívoca (ex.: "total" de
+ * payment_method_performance seria pedidos pagos? tentativas? por método?),
+ * omitimos o campo — um número plausível mas errado é pior que a ausência.
+ */
+function computeRankingTotal(
+  toolName: string, payload: Record<string, unknown>, rows: unknown[],
+): number | undefined {
+  if (typeof payload.total === 'number') return payload.total;
+
+  if (toolName === 'orders_by_status') {
+    return rows.reduce((acc: number, row) => {
+      const orders = (row as { orders?: unknown }).orders;
+      return acc + (typeof orders === 'number' ? orders : 0);
+    }, 0);
+  }
+
+  return undefined;
+}
+
+/**
+ * Detecta campo monetário em qualquer profundidade (inclusive dentro de
+ * `extra`). Alguns rankings não são de moeda no valor principal (ex.:
+ * `campanhas_com_recorrentes` é uma taxa, `situacao_dos_pedidos` é uma
+ * contagem), mas as linhas carregam campos auxiliares em centavos
+ * (`revenueCents`, `totalCents`, `averageTicketCents`) — o modelo precisa do
+ * aviso sempre que esses campos aparecerem, não só quando a métrica
+ * ordenada é dinheiro.
+ */
+function hasCentsField(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasCentsField);
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).some(
+      ([key, nested]) => /Cents$/.test(key) || hasCentsField(nested),
+    );
+  }
+  return false;
+}
+
+/**
  * Envolve o corpo de uma ferramenta com cronômetro, auditoria e conversão de
  * exceção em objeto de erro. O modelo NUNCA deve receber um throw: ele precisa
  * ler a mensagem e decidir se tenta outra coisa ou explica ao usuário.
@@ -202,15 +248,16 @@ export function buildAgentTools(context: AgentToolContext): ToolSet {
         // Algumas ferramentas devolvem `rows`, outras `groups`, `methods` ou
         // `orders`. Normalizamos para o modelo não precisar saber a diferença.
         const rows = (payload.rows ?? payload.groups ?? payload.methods ?? payload.orders ?? payload.products ?? []) as unknown[];
+        const total = computeRankingTotal(spec.tool, payload, rows);
 
         return {
           tipo: input.tipo,
           descricao: spec.descricao,
           periodo: { de: window.from, ate: window.to },
-          total: payload.total ?? rows.length,
+          ...(total !== undefined ? { total } : {}),
           unidade: payload.unit ?? 'count',
           linhas: rows.slice(0, RANKING_ROWS_FOR_MODEL),
-          observacao: payload.unit === 'currency'
+          observacao: payload.unit === 'currency' || hasCentsField(rows)
             ? CENTS_NOTICE
             : '',
         };
