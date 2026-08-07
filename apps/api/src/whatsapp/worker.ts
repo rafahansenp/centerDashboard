@@ -30,23 +30,6 @@ function todayInSaoPaulo(): string {
 }
 
 export async function processInboundMessage(deps: WorkerDeps, message: InboundMessage): Promise<void> {
-  // O código de vínculo chega de um número que AINDA não está vinculado — por
-  // isso é tratado antes da checagem de identidade.
-  if (isLinkCodeMessage(message.text)) {
-    const result = await redeemLinkCode(deps.prisma, message.text, message.fromPhoneE164);
-    const replyText = result.ok
-      ? 'Pronto! Este número está vinculado à sua conta. Pode perguntar sobre suas métricas. 📊'
-      : {
-          not_found: 'Código não encontrado. Gere um novo na dashboard, em Configurações.',
-          expired: `Código expirado — ele vale ${LINK_CODE_TTL_MINUTES} minutos. Gere um novo na dashboard.`,
-          used: 'Este código já foi usado. Gere um novo na dashboard, em Configurações.',
-          phone_taken: 'Este número já está vinculado a outro usuário. Fale com o administrador da conta.',
-        }[result.reason];
-
-    await deps.cloudApi.sendText(message.fromPhoneE164, replyText);
-    return;
-  }
-
   const identity = await deps.prisma.whatsAppIdentity.findUnique({
     where: { phoneE164: message.fromPhoneE164 },
   });
@@ -54,6 +37,27 @@ export async function processInboundMessage(deps: WorkerDeps, message: InboundMe
   // Fronteira de autorização do bot: número não vinculado e verificado nunca
   // chega ao agente, então nunca toca em dado de nenhuma organização.
   if (!identity || !identity.verifiedAt) {
+    // O código de vínculo só é interpretado para números AINDA não
+    // vinculados/verificados. `isLinkCodeMessage` casa qualquer palavra de 6
+    // caracteres do alfabeto Crockford (ex.: "VENDAS", "MARGEM") — um usuário
+    // JÁ verificado não tem motivo para reenviar um código, então checar isso
+    // aqui dentro (e não antes da busca de identidade) evita sequestrar uma
+    // pergunta real de quem já está vinculado.
+    if (isLinkCodeMessage(message.text)) {
+      const result = await redeemLinkCode(deps.prisma, message.text, message.fromPhoneE164);
+      const replyText = result.ok
+        ? 'Pronto! Este número está vinculado à sua conta. Pode perguntar sobre suas métricas. 📊'
+        : {
+            not_found: 'Código não encontrado. Gere um novo na dashboard, em Configurações.',
+            expired: `Código expirado — ele vale ${LINK_CODE_TTL_MINUTES} minutos. Gere um novo na dashboard.`,
+            used: 'Este código já foi usado. Gere um novo na dashboard, em Configurações.',
+            phone_taken: 'Este número já está vinculado a outro usuário. Fale com o administrador da conta.',
+          }[result.reason];
+
+      await deps.cloudApi.sendText(message.fromPhoneE164, replyText);
+      return;
+    }
+
     await deps.cloudApi.sendText(message.fromPhoneE164, UNKNOWN_PHONE_REPLY);
     return;
   }
@@ -75,9 +79,13 @@ export async function processInboundMessage(deps: WorkerDeps, message: InboundMe
     });
     reply = result.reply;
     toolCalls = result.toolCalls;
-  } catch {
+  } catch (error) {
     // Falha no agente ou no banco não pode impedir a resposta: silêncio no
-    // WhatsApp é pior do que uma mensagem de erro.
+    // WhatsApp é pior do que uma mensagem de erro. Mas a falha precisa ficar
+    // visível — sem log, o job ainda é reportado como "completed" pelo
+    // BullMQ (a função não relança), e não haveria nenhum sinal de que todo
+    // usuário está recebendo só a resposta de fallback.
+    console.error(`worker do WhatsApp: falha ao processar wamid=${message.wamid}`, error);
   }
 
   // Deliberadamente fora do try: se o envio falhar, a exceção sobe e o BullMQ

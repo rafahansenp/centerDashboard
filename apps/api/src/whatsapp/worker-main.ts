@@ -35,6 +35,12 @@ worker.on('failed', (job, error) => {
   console.error(`job ${job?.id} falhou (tentativa ${job?.attemptsMade}):`, error.message);
 });
 worker.on('completed', (job) => console.log(`job ${job.id} concluído`));
+// Sem este listener, um 'error' emitido pelo Worker (blip de rede, Redis
+// reiniciando, pool de conexões esgotado) derruba o processo inteiro — o
+// EventEmitter do Node lança quando 'error' não tem nenhum listener.
+worker.on('error', (error) => {
+  console.error('worker do WhatsApp: erro de conexão', error.message);
+});
 
 console.log('worker do WhatsApp em execução');
 

@@ -31,7 +31,11 @@ function buildDeps(identity: unknown) {
     conversation: { findFirst: jest.fn(async () => ({ id: 'conv_1' })), update: jest.fn(async () => ({})) },
     message: { findMany: jest.fn(async () => []), create: jest.fn(async () => ({ id: 'msg_1' })) },
     toolCallLog: { createMany: jest.fn(async () => ({ count: 0 })) },
-    linkCode: { findUnique: jest.fn(async () => null), update: jest.fn(async () => ({})) },
+    linkCode: {
+      findUnique: jest.fn(async () => null),
+      update: jest.fn(async () => ({})),
+      updateMany: jest.fn(async () => ({ count: 0 })),
+    },
   } as unknown as PrismaClient;
 
   const deps: WorkerDeps = {
@@ -44,9 +48,16 @@ function buildDeps(identity: unknown) {
   return { deps, sendText, prisma };
 }
 
+let consoleErrorSpy: jest.SpyInstance;
+
 beforeEach(() => {
   runAgent.mockReset();
   runAgent.mockResolvedValue({ reply: 'Você faturou R$ 4.800,00.', toolCalls: [] });
+  consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  consoleErrorSpy.mockRestore();
 });
 
 describe('processInboundMessage', () => {
@@ -90,11 +101,40 @@ describe('processInboundMessage', () => {
     const { deps, sendText } = buildDeps(verifiedIdentity);
     await expect(processInboundMessage(deps, message)).resolves.toBeUndefined();
     expect(sendText).toHaveBeenCalledWith('+5511988887777', expect.stringMatching(/não consegui/i));
+    // A falha não pode ficar muda: sem isso, o job seria reportado como
+    // "completed" pelo BullMQ mesmo quando todo usuário recebe só o fallback.
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(message.wamid),
+      expect.any(Error),
+    );
   });
 
   it('rethrows when sending fails, so BullMQ can retry', async () => {
     const { deps } = buildDeps(verifiedIdentity);
     (deps.cloudApi.sendText as jest.Mock).mockRejectedValueOnce(new Error('graph 503'));
     await expect(processInboundMessage(deps, message)).rejects.toThrow('graph 503');
+  });
+
+  it('redeems a link code for a phone that is not linked yet', async () => {
+    const { deps, sendText, prisma } = buildDeps(null);
+    const codeMessage = { ...message, text: 'ABCDEF' };
+    await processInboundMessage(deps, codeMessage);
+    expect(prisma.linkCode.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { code: 'ABCDEF' } }),
+    );
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(
+      '+5511988887777',
+      expect.stringMatching(/código não encontrado/i),
+    );
+  });
+
+  it('does not treat a verified user\'s word-shaped message as a link code', async () => {
+    const { deps, sendText, prisma } = buildDeps(verifiedIdentity);
+    const wordMessage = { ...message, text: 'VENDAS' };
+    await processInboundMessage(deps, wordMessage);
+    expect(prisma.linkCode.findUnique).not.toHaveBeenCalled();
+    expect(runAgent).toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith('+5511988887777', 'Você faturou R$ 4.800,00.');
   });
 });
