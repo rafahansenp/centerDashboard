@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { getAuthToken } from '../lib/api-client.js';
+import { IntegrationCredentialsForm } from '../components/settings/IntegrationCredentialsForm.js';
 
 interface LinkCodeResponse { code: string; expiresAt: string; ttlMinutes: number }
 
@@ -43,6 +44,11 @@ export function SettingsPage() {
           {(mutation.error as Error).message}
         </p>
       ) : null}
+
+      <hr style={{ borderColor: 'var(--hairline)' }} />
+
+      <h2 className="text-lg font-semibold">Integrações de dados</h2>
+      <IntegrationCredentialsForm />
     </section>
   );
 }
