@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   LINK_CODE_TTL_MINUTES, createLinkCode, generateLinkCode, isLinkCodeMessage, redeemLinkCode,
 } from '../whatsapp/linking.js';
@@ -8,7 +8,10 @@ function buildPrisma() {
     linkCode: {
       create: jest.fn(async ({ data }: { data: unknown }) => data),
       findUnique: jest.fn(async () => null),
-      update: jest.fn(async () => ({})),
+      // Representa a reivindicação atômica de `redeemLinkCode` e a invalidação
+      // de códigos anteriores em `createLinkCode`. Por padrão "ganha a
+      // corrida" (count: 1); testes de concorrência sobrescrevem isso.
+      updateMany: jest.fn(async () => ({ count: 1 })),
     },
     whatsAppIdentity: { findUnique: jest.fn(async () => null), upsert: jest.fn(async () => ({})) },
   } as unknown as PrismaClient;
@@ -58,6 +61,19 @@ describe('createLinkCode', () => {
     expect(ttlMs).toBeLessThanOrEqual(LINK_CODE_TTL_MINUTES * 60_000 + 1000);
     expect(prisma.linkCode.create).toHaveBeenCalled();
   });
+
+  it("invalidates the user's outstanding unused codes before issuing a new one", async () => {
+    const prisma = buildPrisma();
+    await createLinkCode(prisma, 'user_1');
+    expect(prisma.linkCode.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user_1', usedAt: null },
+      data: { usedAt: expect.any(Date) },
+    });
+    // A invalidação precisa acontecer antes de o novo código ser criado.
+    const invalidateOrder = (prisma.linkCode.updateMany as jest.Mock).mock.invocationCallOrder[0];
+    const createOrder = (prisma.linkCode.create as jest.Mock).mock.invocationCallOrder[0];
+    expect(invalidateOrder).toBeLessThan(createOrder);
+  });
 });
 
 describe('redeemLinkCode', () => {
@@ -74,8 +90,13 @@ describe('redeemLinkCode', () => {
     expect(prisma.whatsAppIdentity.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 'user_1' } }),
     );
-    expect(prisma.linkCode.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { code: 'A2B3C4' } }),
+    // A reivindicação é atômica: só casa (e marca usada) uma linha que ainda
+    // esteja com `usedAt: null` e não expirada.
+    expect(prisma.linkCode.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ code: 'A2B3C4', usedAt: null }),
+        data: { usedAt: expect.any(Date) },
+      }),
     );
   });
 
@@ -115,5 +136,67 @@ describe('redeemLinkCode', () => {
     expect(await redeemLinkCode(prisma, 'A2B3C4', '+5511988887777'))
       .toEqual({ ok: false, reason: 'phone_taken' });
     expect(prisma.whatsAppIdentity.upsert).not.toHaveBeenCalled();
+  });
+
+  // --- Corridas: duas redenções concorrentes do mesmo código ---
+  //
+  // O mock não é um banco real, então simulamos o resultado que o Postgres
+  // garantiria (só uma linha casa `usedAt: null` por vez) controlando
+  // diretamente o retorno do `updateMany` — é a forma de exercitar, num
+  // teste unitário single-threaded, o comportamento que a query atômica
+  // produziria sob concorrência real.
+  it('treats a lost race for the same code as already used, without touching the identity', async () => {
+    const prisma = buildPrisma();
+    (prisma.linkCode.findUnique as jest.Mock)
+      // Leitura inicial: código ainda parece válido.
+      .mockResolvedValueOnce(validCode)
+      // Reclassificação após perder a corrida: outra requisição concorrente
+      // já marcou `usedAt` entre nossa leitura e nossa tentativa de reivindicar.
+      .mockResolvedValueOnce({ ...validCode, usedAt: new Date() });
+    (prisma.linkCode.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 });
+
+    expect(await redeemLinkCode(prisma, 'A2B3C4', '+5511988887777'))
+      .toEqual({ ok: false, reason: 'used' });
+    expect(prisma.whatsAppIdentity.upsert).not.toHaveBeenCalled();
+  });
+
+  it('reclassifies as expired when the claim window closes between read and claim', async () => {
+    const prisma = buildPrisma();
+    (prisma.linkCode.findUnique as jest.Mock)
+      .mockResolvedValueOnce(validCode)
+      .mockResolvedValueOnce({ ...validCode, expiresAt: new Date(Date.now() - 1000) });
+    (prisma.linkCode.updateMany as jest.Mock).mockResolvedValueOnce({ count: 0 });
+
+    expect(await redeemLinkCode(prisma, 'A2B3C4', '+5511988887777'))
+      .toEqual({ ok: false, reason: 'expired' });
+  });
+
+  // --- Corrida: dois códigos DIFERENTES (usuários diferentes) redimidos
+  // concorrentemente para o MESMO telefone ---
+  //
+  // A checagem prévia (`whatsAppIdentity.findUnique`) é só uma otimização do
+  // caminho comum: sob concorrência real, as duas chamadas podem ler `null`
+  // antes de qualquer commit, e o INSERT subjacente de uma delas colide com
+  // a constraint `phoneE164 @unique`. O Prisma expõe isso como um
+  // `PrismaClientKnownRequestError` de código P2002.
+  it('maps a concurrent unique-constraint violation on the phone to phone_taken instead of throwing', async () => {
+    const prisma = buildPrisma();
+    (prisma.linkCode.findUnique as jest.Mock).mockResolvedValueOnce(validCode);
+    (prisma.whatsAppIdentity.upsert as jest.Mock).mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (`phoneE164`)', {
+        code: 'P2002', clientVersion: '6.1.0',
+      }),
+    );
+
+    await expect(redeemLinkCode(prisma, 'A2B3C4', '+5511988887777'))
+      .resolves.toEqual({ ok: false, reason: 'phone_taken' });
+  });
+
+  it('re-throws unrelated errors from the identity upsert instead of swallowing them', async () => {
+    const prisma = buildPrisma();
+    (prisma.linkCode.findUnique as jest.Mock).mockResolvedValueOnce(validCode);
+    (prisma.whatsAppIdentity.upsert as jest.Mock).mockRejectedValueOnce(new Error('conexão perdida'));
+
+    await expect(redeemLinkCode(prisma, 'A2B3C4', '+5511988887777')).rejects.toThrow('conexão perdida');
   });
 });
