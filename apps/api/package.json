@@ -15,8 +15,10 @@
     "db:seed": "prisma db seed",
     "start": "node dist/main.js",
     "start:sync": "node dist/sync/sync-worker-main.js",
+    "start:whatsapp": "node dist/whatsapp/worker-main.js",
     "dev": "node --watch --experimental-strip-types src/main.ts",
     "dev:sync": "node --watch --experimental-strip-types src/sync/sync-worker-main.ts",
+    "dev:whatsapp": "node --watch --experimental-strip-types src/whatsapp/worker-main.ts",
     "eval:agent": "node --experimental-strip-types scripts/eval-agent.ts"
   },
   "prisma": {
@@ -35,6 +37,7 @@
     "@fastify/rate-limit": "^10.2.1",
     "@prisma/client": "^6.1.0",
     "ai": "^5.0.0",
+    "bullmq": "^5.34.0",
     "fastify": "^5.2.0",
     "ioredis": "^5.4.2",
     "zod": "^3.24.1"

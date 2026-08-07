@@ -10,19 +10,7 @@ import { Pseudonymizer } from '@center/pii';
 import { SecretBox } from '@center/secrets';
 import { loadConfig } from './config.js';
 import { buildServer } from './server.js';
-import type { MessageQueue } from './whatsapp/queue.js';
-import type { InboundMessage } from './whatsapp/parse.js';
-
-// TODO(T33): replace with the real BullMQ-backed BullMessageQueue once that
-// task lands. This stub keeps the composition root wireable and startable
-// today without a queue consumer — nothing enqueues messages yet (T32 adds
-// the WhatsApp webhook that will).
-class StubMessageQueue implements MessageQueue {
-  async enqueue(message: InboundMessage): Promise<void> {
-    console.warn('StubMessageQueue: enqueue chamado antes da T33 existir', { wamid: message.wamid });
-  }
-  async close(): Promise<void> {}
-}
+import { BullMessageQueue } from './whatsapp/queue.js';
 
 const config = loadConfig(process.env);
 const prisma = new PrismaClient();
@@ -50,7 +38,7 @@ const mcpServers: McpServerConfig[] = [
 
 const pool = await McpPool.spawn(mcpServers);
 const gateway = new MetricGateway(pool, new RedisCacheStore(redis));
-const queue = new StubMessageQueue();
+const queue = new BullMessageQueue(redis);
 // Decifra uappiApiKey/uappiSecretKey (T24B) — nunca lidos em claro do Postgres.
 const secretBox = new SecretBox(config.credentialsEncryptionKey);
 
