@@ -11,7 +11,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "db:seed": "prisma db seed",
+    "start": "node dist/main.js",
+    "start:sync": "node dist/sync/sync-worker-main.js",
+    "dev": "node --watch --experimental-strip-types src/main.ts",
+    "dev:sync": "node --watch --experimental-strip-types src/sync/sync-worker-main.ts"
+  },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
   },
   "dependencies": {
     "@center/mcp-core": "workspace:*",
