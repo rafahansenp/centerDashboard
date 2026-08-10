@@ -19,7 +19,9 @@
     "dev": "node --watch --experimental-strip-types src/main.ts",
     "dev:sync": "node --watch --experimental-strip-types src/sync/sync-worker-main.ts",
     "dev:whatsapp": "node --watch --experimental-strip-types src/whatsapp/worker-main.ts",
-    "eval:agent": "node --experimental-strip-types scripts/eval-agent.ts"
+    "eval:agent": "node --experimental-strip-types scripts/eval-agent.ts",
+    "warm:cache": "node --experimental-strip-types scripts/warm-cache.ts",
+    "health:report": "node --experimental-strip-types scripts/health-report.ts"
   },
   "prisma": {
     "seed": "node --experimental-strip-types prisma/seed.ts"
