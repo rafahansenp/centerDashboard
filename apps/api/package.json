@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.scripts.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "jest",
     "db:migrate": "prisma migrate dev",
