@@ -108,6 +108,26 @@ describe('runBackfill', () => {
     expect(result.ordersProcessed).toBe(1);
   });
 
+  it('skips a listing entry with no numeroPedido and never calls getOrder for it', async () => {
+    const { deps, getOrder } = buildDeps([[{ semNumero: true }, { numeroPedido: 'P2' }]]);
+    const result = await runBackfill(deps, { days: 30 });
+    expect(result.ordersFailed).toBe(1);
+    expect(result.ordersProcessed).toBe(1);
+    expect(getOrder.mock.calls.map((call) => call[0])).toEqual(['P2']);
+  });
+
+  it('records the error and does not advance the cursor when the listing fails', async () => {
+    const { deps, upsertSyncState, iterateOrders } = buildDeps([]);
+    (iterateOrders as jest.Mock).mockImplementationOnce(async function* () {
+      throw new Error('Uappi respondeu 503');
+    });
+
+    await expect(runBackfill(deps, { days: 30 })).rejects.toThrow('Uappi respondeu 503');
+    expect(upsertSyncState).toHaveBeenCalledWith(expect.objectContaining({
+      update: { lastError: 'Uappi respondeu 503' },
+    }));
+  });
+
   it('records the backfill completion in SyncState', async () => {
     const { deps, upsertSyncState } = buildDeps([[{ numeroPedido: 'P1' }]]);
     await runBackfill(deps, { days: 30 });

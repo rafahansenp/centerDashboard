@@ -90,4 +90,15 @@ describe('UappiTokenProvider', () => {
     await expect(provider.getToken()).rejects.toThrow();
     expect(await provider.getToken()).toBe('jwt-1');
   });
+
+  it('falls back to the global fetch and Date.now when no deps are injected', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(tokenResponse('jwt-1'));
+    try {
+      const provider = new UappiTokenProvider({ baseUrl: 'https://api.uappi.com.br', credentials });
+      expect(await provider.getToken()).toBe('jwt-1');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });

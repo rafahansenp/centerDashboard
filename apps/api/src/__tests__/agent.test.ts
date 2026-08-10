@@ -1,7 +1,7 @@
 import { MockLanguageModelV2 } from 'ai/test';
 import type { MetricGateway } from '@center/mcp-core';
 import type { MetricSeries, TenantContext } from '@center/shared';
-import { MAX_REPLY_CHARS, buildSystemPrompt, runAgent } from '../agent/agent.js';
+import { MAX_REPLY_CHARS, buildSystemPrompt, defaultModel, runAgent } from '../agent/agent.js';
 
 const tenant: TenantContext = { organizationId: 'org_1', externalIds: {} };
 
@@ -155,5 +155,14 @@ describe('runAgent', () => {
   it('returns a fallback when the model answers with empty text', async () => {
     const result = await runAgent({ ...baseInput, gateway: buildGateway(), model: textOnlyModel('   ') });
     expect(result.reply).toMatch(/não consegui/i);
+  });
+});
+
+describe('defaultModel', () => {
+  it('builds an Anthropic Claude Sonnet 5 model from an API key without calling the network', () => {
+    // createAnthropic(...) só monta o cliente; nenhuma chamada de rede acontece
+    // antes de generateText() usar o model retornado.
+    const model = defaultModel('sk-ant-fake-key');
+    expect(model).toBeTruthy();
   });
 });

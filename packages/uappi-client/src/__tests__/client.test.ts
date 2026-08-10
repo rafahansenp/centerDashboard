@@ -112,6 +112,20 @@ describe('UappiClient.listOrders', () => {
   });
 });
 
+describe('UappiClient defaults', () => {
+  it('falls back to the global fetch and its own rate limiters when none are injected', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(page([], 0, 0, 100)));
+    try {
+      const tokenProvider = { getToken: jest.fn(async () => 'jwt-1'), invalidate: jest.fn() } as unknown as UappiTokenProvider;
+      const client = new UappiClient({ baseUrl: 'https://api.uappi.com.br', tokenProvider });
+      await client.listOrders({ from: '2026-01-01', to: '2026-01-31', offset: 0, limit: 100 });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+});
+
 describe('UappiClient.getOrder', () => {
   it('requests the order detail path', async () => {
     const fetchImpl = jest.fn(async () => jsonResponse({ numeroPedido: 'PED-1' }));

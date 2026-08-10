@@ -257,3 +257,64 @@ describe('funil_de_compra', () => {
     );
   });
 });
+
+describe('comparar_periodos', () => {
+  it('routes a product comparison to commerce.compare_products with both windows', async () => {
+    const gateway = buildGateway({
+      callTool: jest.fn(async () => ({ rows: [{ key: 'SKU1', deltaCents: -5000 }], unit: 'currency' })),
+    });
+    const result = await tools(gateway).comparar_periodos.execute!(
+      { tipo: 'produtos', periodoAnterior: 'mês passado', periodoAtual: 'este mês' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(gateway.callTool).toHaveBeenCalledWith(
+      'commerce', 'compare_products',
+      expect.objectContaining({
+        periodA: { from: '2026-02-01', to: '2026-02-28' },
+        periodB: { from: '2026-03-01', to: '2026-03-15' },
+      }),
+      expect.anything(),
+    );
+    expect(result.observacao).toMatch(/centavos/i);
+  });
+
+  it('routes an event comparison to ga4.compare_events', async () => {
+    const gateway = buildGateway({
+      callTool: jest.fn(async () => ({ rows: [] })),
+    });
+    await tools(gateway).comparar_periodos.execute!(
+      { tipo: 'eventos', periodoAnterior: 'mês passado', periodoAtual: 'este mês' }, {} as never,
+    );
+    expect(gateway.callTool).toHaveBeenCalledWith('ga4', 'compare_events', expect.anything(), expect.anything());
+  });
+
+  it('returns an error object instead of throwing when a period phrase is not understood', async () => {
+    const result = await tools(buildGateway()).comparar_periodos.execute!(
+      { tipo: 'produtos', periodoAnterior: 'na época da promoção', periodoAtual: 'este mês' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result.erro).toMatch(/não entendi/i);
+  });
+});
+
+describe('impacto_da_versao', () => {
+  it('compares symmetric windows before and after the release date', async () => {
+    const gateway = buildGateway({
+      queryBatch: jest.fn(async () => [
+        { ...series, metricId: 'commerce.revenue', total: 100_000 },
+        { ...series, metricId: 'commerce.orders', unit: 'count', total: 50 },
+        { ...series, metricId: 'ga4.active_users', unit: 'count', total: 200 },
+      ]),
+    });
+    const result = await tools(gateway).impacto_da_versao.execute!(
+      { versao: '5.8.0', dataDeLancamento: '2026-02-01' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result).toMatchObject({ versao: '5.8.0', lancamento: '2026-02-01' });
+    expect(result.observacao).toMatch(/centavos/i);
+  });
+
+  it('returns an error object instead of throwing on a release date in the future', async () => {
+    const result = await tools(buildGateway()).impacto_da_versao.execute!(
+      { versao: '5.8.0', dataDeLancamento: '2026-12-31' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result.erro).toMatch(/futuro/i);
+  });
+});

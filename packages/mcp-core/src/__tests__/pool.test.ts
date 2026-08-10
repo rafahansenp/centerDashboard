@@ -103,4 +103,10 @@ describe('McpPool', () => {
     expect((await single.listMetrics()).map((m) => m.id)).toEqual(['ga4.sessions']);
     await single.close();
   });
+
+  it('throws when a tool reports success but omits structuredContent', async () => {
+    const stubClient = { callTool: jest.fn(async () => ({})) } as unknown as Client;
+    const bare = McpPool.fromConnections([{ source: 'ga4', client: stubClient }]);
+    await expect(bare.queryMetric(query)).rejects.toThrow('resposta sem structuredContent');
+  });
 });
