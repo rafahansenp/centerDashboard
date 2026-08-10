@@ -7,6 +7,29 @@ import type { BigQueryEventsClientLike } from './interface.js';
 const DEFAULT_LOOKBACK = 10;
 
 /**
+ * Total de compradores distintos no período — calculada isoladamente da query
+ * de eventos precedentes (`buildPurchasePathSql`) porque essa segunda query só
+ * produz linhas quando existe pelo menos um evento precedente dentro da janela
+ * de lookback. Se todo comprador tiver a compra como seu evento mais antigo
+ * capturado no período (ex.: janela estreita, cobertura do export começando
+ * bem no início da sessão), `preceding`/`GROUP BY event_name` fica vazio e uma
+ * subquery escalar acoplada a essa query nunca chega a aparecer em nenhuma
+ * linha — o total seria lido como zero mesmo havendo compradores de verdade.
+ * Por isso o total mora em sua própria query, que não depende do resultado da
+ * outra.
+ */
+export function buildTotalBuyersSql(params: { dataset: string }): string {
+  const dataset = assertDatasetName(params.dataset);
+
+  return `
+    SELECT COUNT(DISTINCT user_pseudo_id) AS buyers
+    FROM \`${dataset}.events_*\`
+    WHERE _TABLE_SUFFIX BETWEEN @fromCompact AND @toCompact
+      AND event_name = 'purchase'
+  `;
+}
+
+/**
  * Para cada usuário que comprou, olha os N eventos imediatamente anteriores à
  * primeira compra e conta com que frequência cada tipo de evento aparece.
  *
@@ -46,7 +69,6 @@ export function buildPurchasePathSql(params: { dataset: string; lookback: number
     SELECT
       event_name,
       COUNT(DISTINCT user_pseudo_id) AS users,
-      (SELECT COUNT(*) FROM first_purchase) AS purchases,
       AVG(position) AS avg_position
     FROM preceding
     WHERE position <= ${lookback}
@@ -56,10 +78,13 @@ export function buildPurchasePathSql(params: { dataset: string; lookback: number
   `;
 }
 
+interface TotalBuyersRow {
+  buyers: number | bigint;
+}
+
 interface PurchasePathRow {
   event_name: string;
   users: number | bigint;
-  purchases: number | bigint;
   avg_position: number;
 }
 
@@ -76,14 +101,15 @@ export function createEventsBeforePurchaseTool(client: BigQueryEventsClientLike)
     description:
       'Eventos que mais aparecem imediatamente antes de uma compra, com a frequência entre os ' +
       'compradores e a posição média na sequência. Use para "quais eventos antecedem uma compra". ' +
-      'Frequência de 0 a 1: 0,95 significa que 95% dos compradores dispararam aquele evento antes.',
+      'Frequência de 0 a 1: 0,95 significa que 95% dos compradores dispararam aquele evento antes. ' +
+      'totalBuyers é a contagem de compradores distintos no período, não de eventos de compra.',
     inputSchema: {
       from: IsoDateSchema, to: IsoDateSchema, tenant: TenantContextSchema,
       eventosAnteriores: z.number().optional(),
     },
     outputSchema: {
       from: z.string(), to: z.string(),
-      totalPurchases: z.number(),
+      totalBuyers: z.number(),
       events: z.array(z.object({
         evento: z.string(), usuarios: z.number(),
         frequencia: z.number(), posicaoMedia: z.number(),
@@ -99,20 +125,28 @@ export function createEventsBeforePurchaseTool(client: BigQueryEventsClientLike)
         );
       }
 
-      const rows = await client.query<PurchasePathRow>(
-        buildPurchasePathSql({ dataset, lookback: eventosAnteriores }),
-        { fromCompact: toCompactDate(from), toCompact: toCompactDate(to) },
-      );
+      const queryParams = { fromCompact: toCompactDate(from), toCompact: toCompactDate(to) };
 
-      const totalPurchases = Number(rows[0]?.purchases ?? 0);
+      const [buyerRows, pathRows] = await Promise.all([
+        client.query<TotalBuyersRow>(buildTotalBuyersSql({ dataset }), queryParams),
+        client.query<PurchasePathRow>(
+          buildPurchasePathSql({ dataset, lookback: eventosAnteriores }),
+          queryParams,
+        ),
+      ]);
+
+      // Contagem de compradores distintos, independente da query de eventos
+      // precedentes (ver comentário em buildTotalBuyersSql) — nunca fica zerada
+      // só porque a segunda query não retornou linhas.
+      const totalBuyers = Number(buyerRows[0]?.buyers ?? 0);
 
       return {
-        from, to, totalPurchases,
-        events: rows
+        from, to, totalBuyers,
+        events: pathRows
           .map((row) => ({
             evento: row.event_name,
             usuarios: Number(row.users),
-            frequencia: totalPurchases === 0 ? 0 : Number(row.users) / totalPurchases,
+            frequencia: totalBuyers === 0 ? 0 : Number(row.users) / totalBuyers,
             posicaoMedia: Number(row.avg_position),
           }))
           .sort((a, b) => b.frequencia - a.frequencia),
