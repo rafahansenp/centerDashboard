@@ -30,4 +30,5 @@ module.exports = {
     '^.+\\.([mc]?[tj])sx?$': preset.transform['^.+\\.(t|j)sx?$'],
   },
   transformIgnorePatterns: [],
+  coverageThreshold: { global: { branches: 80, functions: 80, lines: 80, statements: 80 } },
 };

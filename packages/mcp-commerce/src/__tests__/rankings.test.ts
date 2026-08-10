@@ -142,4 +142,13 @@ describe('compare_products', () => {
     const result = await tool.handler(comparison) as { rows: Array<{ key: string }> };
     expect(result.rows.map((r) => r.key)).toEqual(expect.arrayContaining(['MEI', 'NEW']));
   });
+
+  it('compares by quantity instead of revenue when asked', async () => {
+    const result = await tool.handler({ ...comparison, orderBy: 'quantity' }) as {
+      unit: string; rows: Array<{ key: string; valueA: number; valueB: number }>;
+    };
+    expect(result.unit).toBe('count');
+    // CAM: 4 unidades em janeiro, 1 em fevereiro.
+    expect(result.rows.find((r) => r.key === 'CAM')).toMatchObject({ valueA: 4, valueB: 1 });
+  });
 });

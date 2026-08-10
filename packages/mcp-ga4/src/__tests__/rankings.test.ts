@@ -67,6 +67,13 @@ describe('campaign_users', () => {
     await createCampaignUsersTool(client).handler(period);
     expect(runReport.mock.calls[0]![0].dimensionNames).toEqual(['sessionCampaignName']);
   });
+
+  it('defaults users and sessions to 0 when GA4 omits the metric entirely', async () => {
+    const { client } = fakeClient([[{ dimensions: { sessionCampaignName: 'blackfriday' }, metrics: {} }]]);
+    const result = await createCampaignUsersTool(client).handler(period) as { rows: Array<Record<string, unknown>> };
+    expect(result.rows[0]).toMatchObject({ key: 'blackfriday', value: 0 });
+    expect(result.rows[0]?.extra).toEqual({ sessions: 0, users: 0 });
+  });
 });
 
 describe('device_performance', () => {
@@ -88,6 +95,15 @@ describe('device_performance', () => {
     const result = await createDevicePerformanceTool(client).handler(period) as { rows: Array<{ value: number }> };
     expect(result.rows[0]?.value).toBe(0);
   });
+
+  it('defaults conversions and users to 0 when GA4 omits those metrics', async () => {
+    const { client } = fakeClient([[
+      { dimensions: { deviceCategory: 'mobile' }, metrics: { sessions: 100 } },
+    ]]);
+    const result = await createDevicePerformanceTool(client).handler(period) as { rows: Array<Record<string, unknown>> };
+    expect(result.rows[0]).toMatchObject({ value: 0 });
+    expect(result.rows[0]?.extra).toMatchObject({ users: 0, conversions: 0 });
+  });
 });
 
 describe('page_performance', () => {
@@ -99,6 +115,13 @@ describe('page_performance', () => {
     const result = await createPagePerformanceTool(client).handler(period) as { rows: Array<Record<string, unknown>> };
     expect(result.rows[0]).toMatchObject({ key: '/checkout', value: 0.8 });
     expect(result.rows[0]?.extra).toMatchObject({ pageViews: 500 });
+  });
+
+  it('defaults bounce rate and page views to 0 when GA4 omits the metric', async () => {
+    const { client } = fakeClient([[{ dimensions: { pagePath: '/novo' }, metrics: {} }]]);
+    const result = await createPagePerformanceTool(client).handler(period) as { rows: Array<Record<string, unknown>> };
+    expect(result.rows[0]).toMatchObject({ key: '/novo', value: 0 });
+    expect(result.rows[0]?.extra).toEqual({ pageViews: 0 });
   });
 });
 
@@ -120,6 +143,15 @@ describe('app_versions', () => {
     const result = await createAppVersionsTool(client).handler(period) as { rows: Array<{ key: string }> };
     expect(result.rows.map((r) => r.key)).toEqual(['5.8.0']);
   });
+
+  it('also ignores the "(not set)" bucket GA4 reports for some untagged traffic', async () => {
+    const { client } = fakeClient([[
+      { dimensions: { appVersion: '(not set)' }, metrics: { activeUsers: 300, sessions: 400 } },
+      { dimensions: { appVersion: '5.8.0' }, metrics: { activeUsers: 500, sessions: 700 } },
+    ]]);
+    const result = await createAppVersionsTool(client).handler(period) as { rows: Array<{ key: string }> };
+    expect(result.rows.map((r) => r.key)).toEqual(['5.8.0']);
+  });
 });
 
 describe('top_events', () => {
@@ -130,6 +162,13 @@ describe('top_events', () => {
     ]]);
     const result = await createTopEventsTool(client).handler(period) as { rows: Array<{ key: string; value: number }> };
     expect(result.rows[0]).toMatchObject({ key: 'page_view', value: 5000 });
+  });
+
+  it('defaults the count and users to 0 when GA4 omits those metrics', async () => {
+    const { client } = fakeClient([[{ dimensions: { eventName: 'sign_up' }, metrics: {} }]]);
+    const result = await createTopEventsTool(client).handler(period) as { rows: Array<Record<string, unknown>> };
+    expect(result.rows[0]).toMatchObject({ key: 'sign_up', value: 0 });
+    expect(result.rows[0]?.extra).toEqual({ users: 0 });
   });
 });
 

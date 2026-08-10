@@ -126,12 +126,34 @@ describe('commerce.average_ticket', () => {
     const series = await provider.query(query({ metricId: 'commerce.average_ticket' }));
     expect(series.total).toBe(11667);
   });
+
+  it('returns a zero total instead of dividing by zero over a period with no orders at all', async () => {
+    const series = await provider.query(query({
+      metricId: 'commerce.average_ticket', from: '2025-01-01', to: '2025-01-31',
+    }));
+    expect(series.total).toBe(0);
+  });
 });
 
 describe('commerce.items_sold', () => {
   it('sums item quantities of sales-status orders', async () => {
     // P1: 2 camisetas, P2: 1 tênis. P5 não tem itens.
     expect((await provider.query(query({ metricId: 'commerce.items_sold' }))).total).toBe(3);
+  });
+
+  it('also aggregates at week and month granularity', async () => {
+    const week = await provider.query(query({ metricId: 'commerce.items_sold', granularity: 'week' }));
+    const month = await provider.query(query({ metricId: 'commerce.items_sold', granularity: 'month' }));
+    expect(week.total).toBe(3);
+    expect(month.total).toBe(3);
+  });
+
+  it('groups items_sold by a dimension too', async () => {
+    const series = await provider.query(query({
+      metricId: 'commerce.items_sold', to: '2026-01-15', groupBy: 'paymentMethod',
+    }));
+    expect(series.points.filter((p) => p.date === '2026-01-15').map((p) => p.group).sort())
+      .toEqual(['cartao', 'pix']);
   });
 });
 
@@ -146,11 +168,30 @@ describe('commerce.new_customers', () => {
     const series = await provider.query(query({ metricId: 'commerce.new_customers' }));
     expect(series.points.find((p) => p.date === '2026-01-31')?.value).toBe(0);
   });
+
+  it('also aggregates at week and month granularity', async () => {
+    const week = await provider.query(query({ metricId: 'commerce.new_customers', granularity: 'week' }));
+    const month = await provider.query(query({ metricId: 'commerce.new_customers', granularity: 'month' }));
+    expect(week.total).toBe(4);
+    expect(month.total).toBe(4);
+  });
 });
 
 describe('métrica desconhecida', () => {
   it('rejects an unknown metric id', async () => {
     await expect(provider.query(query({ metricId: 'commerce.inventado' })))
       .rejects.toThrow('métrica desconhecida');
+  });
+});
+
+describe('dimensão desconhecida', () => {
+  it('rejects an unsupported groupBy dimension', async () => {
+    await expect(provider.query(query({ groupBy: 'inventada' })))
+      .rejects.toThrow('dimensão não suportada');
+  });
+
+  it('rejects an unsupported filter dimension', async () => {
+    await expect(provider.query(query({ filters: { inventada: 'x' } })))
+      .rejects.toThrow('dimensão não suportada');
   });
 });

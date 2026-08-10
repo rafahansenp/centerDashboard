@@ -155,3 +155,28 @@ describe('campaign_returning_customers', () => {
     expect([...values].sort((a, b) => b - a)).toEqual(values);
   });
 });
+
+describe('campaign_returning_customers — pedidos sem cliente vinculado', () => {
+  const tool = createReturningCustomersTool(prisma);
+  const guestPeriod = { from: '2026-03-01', to: '2026-03-31', tenant };
+
+  beforeAll(async () => {
+    // Pedido de visitante: sem customerExternalId, customerId fica null no banco.
+    await seedOrders([
+      { numeroPedido: 'G1', emittedAtLocal: '2026-03-05T10:00:00', statusGroup: 'PAID', totalCents: 10000,
+        campaign: 'sem-cliente' },
+    ]);
+  });
+
+  it('reports zero customers, zero rate and zero share for a group made only of guest checkouts', async () => {
+    const result = await tool.handler(guestPeriod) as {
+      total: number; rows: Array<{ key: string; value: number; share: number; extra: Record<string, number> }>;
+    };
+    const row = result.rows.find((r) => r.key === 'sem-cliente');
+    expect(row?.extra.customers).toBe(0);
+    expect(row?.value).toBe(0);
+    // Único grupo do período, com taxa 0 — o total agregado também é 0.
+    expect(row?.share).toBe(0);
+    expect(result.total).toBe(0);
+  });
+});
