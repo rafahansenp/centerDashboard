@@ -399,5 +399,35 @@ export function buildAgentTools(context: AgentToolContext): ToolSet {
         };
       }),
     }),
+
+    caminho_ate_a_compra: tool({
+      description:
+        'Eventos que mais aparecem antes de uma compra, com a frequência entre os compradores. ' +
+        'Use para "quais eventos antecedem uma compra".',
+      inputSchema: z.object(PeriodShape),
+      execute: instrument(context, 'caminho_ate_a_compra', async (input) => {
+        const window = resolveWindow(input, today);
+        return gateway.callTool<Record<string, unknown>>(
+          'behavior', 'events_before_purchase',
+          { from: window.from, to: window.to, tenant },
+          { rangeEnd: window.to },
+        );
+      }),
+    }),
+
+    impacto_da_tela: tool({
+      description:
+        'Compara a taxa de compra de quem passou por uma tela com a de quem não passou. Use para ' +
+        '"usuários que abandonam a tela X compram menos". SEMPRE repita a ressalva sobre causa.',
+      inputSchema: z.object({ tela: z.string().describe('nome da tela ou página'), ...PeriodShape }),
+      execute: instrument(context, 'impacto_da_tela', async (input) => {
+        const window = resolveWindow(input, today);
+        return gateway.callTool<Record<string, unknown>>(
+          'behavior', 'screen_abandon_impact',
+          { from: window.from, to: window.to, tela: input.tela, tenant },
+          { rangeEnd: window.to },
+        );
+      }),
+    }),
   };
 }

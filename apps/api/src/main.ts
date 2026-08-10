@@ -34,6 +34,12 @@ const mcpServers: McpServerConfig[] = [
     args: ['../../packages/mcp-ga4/dist/main.js'],
     env: { GA4_CREDENTIALS_JSON: config.ga4CredentialsJson, MOCK_EXTERNAL_APIS: String(config.mockExternalApis) },
   },
+  {
+    source: 'behavior',
+    command: process.execPath,
+    args: ['../../packages/mcp-behavior/dist/main.js'],
+    env: { GA4_CREDENTIALS_JSON: config.ga4CredentialsJson, MOCK_EXTERNAL_APIS: String(config.mockExternalApis) },
+  },
 ];
 
 const pool = await McpPool.spawn(mcpServers);
