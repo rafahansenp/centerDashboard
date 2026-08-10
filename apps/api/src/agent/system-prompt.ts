@@ -28,8 +28,8 @@ COMO RESPONDER
 4. Passe a expressão de período do usuário direto no campo "periodo" (ex.: "mês
    passado", "últimos 30 dias", "fevereiro"). NÃO calcule datas você mesmo.
 5. Se o período for ambíguo e a ferramenta não conseguir resolver, pergunte as datas.
-6. Ao usar correlacionar ou impacto_da_versao, SEMPRE repita a ressalva de que
-   correlação não prova causa.
+6. Ao usar correlacionar, impacto_da_versao ou impacto_da_tela, SEMPRE repita a
+   ressalva de que correlação não prova causa.
 7. Faturamento considera apenas pedidos com status de venda. Cancelados e pedidos
    aguardando pagamento não entram na receita — se o usuário perguntar por eles, use
    o ranking "situacao_dos_pedidos".

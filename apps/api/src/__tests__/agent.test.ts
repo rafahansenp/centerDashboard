@@ -75,6 +75,13 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/Crashlytics/);
     expect(prompt).toMatch(/performance/i);
   });
+
+  it('requires the causality caveat to be repeated for every tool that returns one', () => {
+    const prompt = buildSystemPrompt('2026-03-15');
+    expect(prompt).toMatch(/correlacionar/);
+    expect(prompt).toMatch(/impacto_da_versao/);
+    expect(prompt).toMatch(/impacto_da_tela/);
+  });
 });
 
 describe('runAgent', () => {
