@@ -161,8 +161,11 @@ describe('runAgent', () => {
 describe('defaultModel', () => {
   it('builds an Anthropic Claude Sonnet 5 model from an API key without calling the network', () => {
     // createAnthropic(...) só monta o cliente; nenhuma chamada de rede acontece
-    // antes de generateText() usar o model retornado.
+    // antes de generateText() usar o model retornado. Checa modelId/provider
+    // reais em vez de só truthiness, para pegar um id de modelo trocado ou uma
+    // chave que não chegou até o provider.
     const model = defaultModel('sk-ant-fake-key');
-    expect(model).toBeTruthy();
+    expect(model.modelId).toBe('claude-sonnet-5');
+    expect(model.provider).toBe('anthropic.messages');
   });
 });
