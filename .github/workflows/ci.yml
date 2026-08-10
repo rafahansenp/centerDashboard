@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: center
+          POSTGRES_PASSWORD: center
+          POSTGRES_DB: center_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U center" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://center:center@localhost:5432/center_test?schema=public
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.15.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @center/api exec prisma generate
+      # mcp-commerce roda contra o Postgres real; a migração precisa vir antes.
+      - run: pnpm --filter @center/api exec prisma migrate deploy
+      - run: pnpm build
+      - run: pnpm typecheck
+      # --coverage habilita o coverageThreshold já configurado em cada
+      # jest.config.cjs (ver ledger da Tarefa 1): sem a flag, o limiar nunca é
+      # aplicado. Turborepo repassa argumentos após `--` para o script `test`
+      # de cada pacote; `turbo.json` já declara outputs: ["coverage/**"].
+      - run: pnpm test -- --coverage
