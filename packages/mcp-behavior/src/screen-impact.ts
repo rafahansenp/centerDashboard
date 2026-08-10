@@ -24,7 +24,12 @@ export function buildScreenImpactSql(params: { dataset: string }): string {
       SELECT
         user_pseudo_id,
         event_name,
-        (SELECT value.string_value FROM UNNEST(event_params)
+        -- ANY_VALUE (não uma subquery escalar simples) porque um único evento
+        -- pode carregar mais de uma das três chaves ao mesmo tempo (ex.: SDK
+        -- do Firebase gravando firebase_screen e um evento custom gravando
+        -- page_title juntos) — sem o agregador, "mais de um elemento" derruba
+        -- a query inteira em produção.
+        (SELECT ANY_VALUE(value.string_value) FROM UNNEST(event_params)
          WHERE key IN ('firebase_screen', 'screen_name', 'page_title')) AS screen
       FROM \`${dataset}.events_*\`
       WHERE _TABLE_SUFFIX BETWEEN @fromCompact AND @toCompact
@@ -32,7 +37,12 @@ export function buildScreenImpactSql(params: { dataset: string }): string {
     per_user AS (
       SELECT
         user_pseudo_id,
-        LOGICAL_OR(screen = @screenName) AS saw_screen,
+        -- COALESCE(..., FALSE): LOGICAL_OR devolve NULL (não FALSE) quando
+        -- "screen" é NULL em todos os eventos do usuário — sem isso, quem
+        -- nunca dispara firebase_screen/screen_name/page_title cai num
+        -- terceiro grupo saw_screen=NULL que nem viramATela nem
+        -- naoViramATela capturam, e o usuário some da comparação inteira.
+        COALESCE(LOGICAL_OR(screen = @screenName), FALSE) AS saw_screen,
         LOGICAL_OR(event_name = 'purchase') AS bought
       FROM events
       GROUP BY user_pseudo_id
@@ -64,16 +74,32 @@ export function createScreenAbandonImpactTool(client: BigQueryEventsClientLike):
     name: 'screen_abandon_impact',
     description:
       'Compara a taxa de compra de quem passou por uma tela específica com a de quem não passou. ' +
-      'Use para "usuários que abandonam a tela X compram menos?". Informe o nome da tela em "tela". ' +
+      'Use para "usuários que abandonam a tela X compram menos?". Informe o nome da tela em "tela" — ' +
+      'a comparação com o GA4/Firebase é sensível a maiúsculas/minúsculas. taxaDeCompra vai de 0 a 1 ' +
+      '(0,05 = 5%). diferenca é viramATela.taxaDeCompra menos naoViramATela.taxaDeCompra, em pontos ' +
+      'percentuais (negativo = quem viu a tela compra menos). diferenca vem null quando um dos dois ' +
+      'grupos não tem nenhum usuário no período — nesse caso NÃO existe comparação válida; leia ' +
+      '"observacao" e diga isso ao usuário em vez de citar um número. ' +
       'SEMPRE repita a ressalva de que correlação não prova causa.',
     inputSchema: {
       from: IsoDateSchema, to: IsoDateSchema, tenant: TenantContextSchema, tela: z.string(),
     },
     outputSchema: {
       tela: z.string(), from: z.string(), to: z.string(),
-      viramATela: z.object({ usuarios: z.number(), compradores: z.number(), taxaDeCompra: z.number() }),
-      naoViramATela: z.object({ usuarios: z.number(), compradores: z.number(), taxaDeCompra: z.number() }),
-      diferenca: z.number(),
+      viramATela: z.object({
+        usuarios: z.number(), compradores: z.number(),
+        taxaDeCompra: z.number().describe('fração de 0 a 1; 0,05 significa que 5% desse grupo comprou'),
+      }),
+      naoViramATela: z.object({
+        usuarios: z.number(), compradores: z.number(),
+        taxaDeCompra: z.number().describe('fração de 0 a 1; 0,05 significa que 5% desse grupo comprou'),
+      }),
+      diferenca: z.number().nullable().describe(
+        'viramATela.taxaDeCompra menos naoViramATela.taxaDeCompra, em pontos percentuais ' +
+        '(ex.: -0,15 = 15 pontos percentuais a menos). null quando um dos grupos não tem usuários — ' +
+        'ver "observacao" em vez de calcular ou estimar a diferença.',
+      ),
+      observacao: z.string(),
       ressalva: z.string(),
     },
     handler: async (args) => {
@@ -102,12 +128,31 @@ export function createScreenAbandonImpactTool(client: BigQueryEventsClientLike):
       const saw = cohort(true);
       const didNotSee = cohort(false);
 
+      // Um dos dois grupos vazio não é "diferença zero" — é ausência de
+      // comparação. Acontece com um nome de tela que não bate com o que o
+      // GA4/Firebase registra (maiúsculas/minúsculas, tela não instrumentada)
+      // ou, no extremo oposto, com uma tela que todo mundo visita. Nos dois
+      // casos, devolver um número aqui seria inventar um achado causal a
+      // partir de um erro de digitação — por isso `diferenca` vira `null` e a
+      // razão vai em `observacao`, em vez de silenciosamente reportar 0 ou
+      // uma diferença fabricada.
+      const observacao = saw.usuarios === 0
+        ? `Nenhum usuário do período foi identificado na tela "${tela}" — confira se o nome bate ` +
+          'exatamente com o que o GA4/Firebase registra (maiúsculas/minúsculas importam) ou se essa ' +
+          'tela não é instrumentada nesse app/site. Sem usuários nesse grupo, a diferença não pode ' +
+          'ser calculada.'
+        : didNotSee.usuarios === 0
+          ? `Todos os usuários do período passaram pela tela "${tela}" — não existe grupo de ` +
+            'comparação nesse período, então a diferença não pode ser calculada.'
+          : '';
+
       return {
         tela, from, to,
         viramATela: saw,
         naoViramATela: didNotSee,
         // Diferença em pontos percentuais, no sentido "quem viu menos quem não viu".
-        diferenca: saw.taxaDeCompra - didNotSee.taxaDeCompra,
+        diferenca: observacao ? null : saw.taxaDeCompra - didNotSee.taxaDeCompra,
+        observacao,
         ressalva: CAVEAT,
       };
     },
