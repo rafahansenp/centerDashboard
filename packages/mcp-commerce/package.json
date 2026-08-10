@@ -18,6 +18,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@center/pii": "workspace:*",
+    "@center/uappi-sync": "workspace:^",
     "dotenv": "^16.6.1"
   }
 }

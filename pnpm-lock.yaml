@@ -179,6 +179,12 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@center/pii':
+        specifier: workspace:*
+        version: link:../pii
+      '@center/uappi-sync':
+        specifier: workspace:^
+        version: link:../uappi-sync
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
