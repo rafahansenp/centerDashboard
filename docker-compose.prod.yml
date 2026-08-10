@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER}']
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: ['redisdata:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: [.env]
+    # DATABASE_URL/REDIS_URL do .env normalmente apontam para localhost (uso local
+    # com docker-compose.yml, que publica as portas no host). Dentro da rede deste
+    # compose, os serviços são alcançados pelo nome (postgres/redis), não localhost.
+    # Este bloco tem precedência sobre env_file para as mesmas chaves.
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+    ports: ['3333:3333']
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: sh -c "npx prisma migrate deploy && node dist/main.js"
+    restart: unless-stopped
+
+  sync:
+    build: .
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      api: { condition: service_started }
+    command: node dist/sync/sync-worker-main.js
+    restart: unless-stopped
+
+  whatsapp:
+    build: .
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      api: { condition: service_started }
+      redis: { condition: service_healthy }
+    command: node dist/whatsapp/worker-main.js
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
