@@ -67,7 +67,11 @@ describe('contrato de centavos — ferramentas do agente', () => {
   it('warns about cents in a currency ranking too', async () => {
     const result = await tools.ranking.execute!(
       { tipo: 'campanhas_por_receita', periodo: 'mês passado' }, {} as never,
-    ) as Record<string, string>;
+    ) as Record<string, unknown>;
     expect(result.observacao).toMatch(/CENTAVOS/);
+    // O total do ranking também passa por computeRankingTotal — sem esta
+    // asserção, alguém "ajustando" o total do ranking para reais deixaria
+    // este teste verde só por causa do aviso textual.
+    expect(result.total).toBe(CENTS);
   });
 });
