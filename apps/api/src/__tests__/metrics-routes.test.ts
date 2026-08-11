@@ -222,6 +222,25 @@ describe('POST /api/tools/:source/:name', () => {
     expect(response.statusCode).toBe(401);
     await app.close();
   });
+
+  it('rejects a periodA/periodB range longer than 400 days on compare_products', async () => {
+    // C1: compare_products/compare_events recebem periodA/periodB (objetos),
+    // não from/to no nível raiz — antes do fix, o handler só olhava
+    // body.from/body.to e deixava esta forma passar sem nenhum teto de
+    // intervalo, apesar de fazer os mesmos joins CommerceOrderItem⋈CommerceOrder.
+    const { app, gateway, token } = await setup();
+    const response = await app.inject({
+      method: 'POST', url: '/api/tools/commerce/compare_products', headers: auth(token),
+      payload: {
+        periodA: { from: '1900-01-01', to: '1900-02-01' },
+        periodB: { from: '1900-01-01', to: '2100-01-01' },
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toMatch(/400 dias/);
+    expect(gateway.callTool).not.toHaveBeenCalled();
+    await app.close();
+  });
 });
 
 describe('POST /api/analysis/correlate', () => {

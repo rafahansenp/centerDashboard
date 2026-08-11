@@ -42,8 +42,12 @@ const redis = new Redis(config.redisUrl);
 
 const pool = await McpPool.spawn([
   { source: 'commerce', command: process.execPath, args: ['../../packages/mcp-commerce/dist/main.js'],
-    // UAPPI_BASE_URL habilita out_of_stock_products (T15) condicionalmente — o
-    // servidor só a registra se a variável existir, sem precisar de credencial fixa.
+    // UAPPI_BASE_URL é repassada, mas `packages/mcp-commerce` não a lê hoje —
+    // não há registro condicional de ferramenta nenhuma. `out_of_stock_products`
+    // (T15) nunca foi implementada (spike bloqueado por falta de credencial da
+    // Uappi) e por isso não está em ALLOWED_TOOLS/RANKINGS (ver routes/metrics.ts,
+    // agent/tools.ts). A variável fica aqui pronta para quando a ferramenta
+    // existir de fato.
     env: { DATABASE_URL: config.databaseUrl, UAPPI_BASE_URL: config.uappiBaseUrl,
       CREDENTIALS_ENCRYPTION_KEY: config.credentialsEncryptionKey } },
   { source: 'ga4', command: process.execPath, args: ['../../packages/mcp-ga4/dist/main.js'],

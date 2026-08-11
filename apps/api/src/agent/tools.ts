@@ -4,6 +4,8 @@ import { correlateMetrics, type MetricGateway } from '@center/mcp-core';
 import { GranularitySchema, type MetricQuery, type MetricSource, type TenantContext } from '@center/shared';
 import { resolvePeriodPhrase } from './date-resolver.js';
 import { analyzeAppVersionImpact } from '../analysis/app-version-impact.js';
+import { assertRange, BadRequestError } from '../range.js';
+import { AgentGuidanceError } from '../errors.js';
 
 export interface AgentToolCall {
   toolName: string;
@@ -42,7 +44,10 @@ const RANKINGS: Record<string, { source: MetricSource; tool: string; descricao: 
   situacao_dos_pedidos: { source: 'commerce', tool: 'orders_by_status', descricao: 'pedidos por situação' },
   pedidos_que_falharam: { source: 'commerce', tool: 'failed_orders', descricao: 'compras com pagamento recusado' },
   meios_de_pagamento: { source: 'commerce', tool: 'payment_method_performance', descricao: 'conversão por meio de pagamento' },
-  produtos_sem_estoque: { source: 'commerce', tool: 'out_of_stock_products', descricao: 'produtos com saldo zerado' },
+  // 'produtos_sem_estoque' (out_of_stock_products) removida deliberadamente:
+  // a ferramenta nunca foi implementada (spike de catálogo/estoque bloqueado
+  // por falta de credencial da Uappi). Restaurar quando o spike for
+  // desbloqueado — até lá, listá-la aqui só produz um McpToolError.
   origens_de_trafego: { source: 'ga4', tool: 'traffic_sources', descricao: 'origens por usuários' },
   campanhas_por_usuarios: { source: 'ga4', tool: 'campaign_users', descricao: 'campanhas por usuários' },
   paginas_com_abandono: { source: 'ga4', tool: 'page_performance', descricao: 'páginas por taxa de rejeição' },
@@ -100,6 +105,28 @@ function hasCentsField(value: unknown): boolean {
 }
 
 /**
+ * Mensagem genérica devolvida ao modelo para qualquer falha que não seja
+ * nossa própria orientação (`AgentGuidanceError`/`BadRequestError`) — ou
+ * seja, qualquer erro vindo de um sistema upstream (`McpToolError` do MCP
+ * server, Prisma, rede). Mesma política de `upstreamError` em
+ * `routes/metrics.ts`: mensagem genérica para fora, mensagem real só no log
+ * de auditoria (`errorMessage` abaixo, que vira `ToolCallLog.errorMessage`).
+ */
+const GENERIC_TOOL_ERROR = 'não consegui obter esse dado agora. tente de novo em instantes.';
+
+/**
+ * Erros com mensagem segura para repassar ao modelo: nós mesmos as
+ * escrevemos para serem lidas por ele (período não entendido, ranking
+ * desconhecido, data no futuro) ou para orientar quem chama a ferramenta
+ * (intervalo inválido/grande demais). Qualquer outro erro carrega texto de
+ * um sistema upstream, que pode incluir nomes de tabela, host do banco ou
+ * stack trace — isso NUNCA deve chegar ao modelo (e daí ao WhatsApp).
+ */
+function isSafeToShareWithModel(error: unknown): boolean {
+  return error instanceof AgentGuidanceError || error instanceof BadRequestError;
+}
+
+/**
  * Envolve o corpo de uma ferramenta com cronômetro, auditoria e conversão de
  * exceção em objeto de erro. O modelo NUNCA deve receber um throw: ele precisa
  * ler a mensagem e decidir se tenta outra coisa ou explica ao usuário.
@@ -117,10 +144,13 @@ function instrument<TInput, TOutput extends Record<string, unknown>>(
       return output;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // A mensagem REAL sempre vai para a auditoria (ToolCallLog), mesmo
+      // quando é genérica para o modelo — é assim que a falha continua
+      // diagnosticável no servidor.
       context.onToolCall?.({
         toolName, input, durationMs: Date.now() - startedAt, success: false, errorMessage: message,
       });
-      return { erro: message };
+      return { erro: isSafeToShareWithModel(error) ? message : GENERIC_TOOL_ERROR };
     }
   };
 }
@@ -138,17 +168,27 @@ function resolveWindow(input: PeriodInput, today: string): {
   if (input.periodo) {
     const resolved = resolvePeriodPhrase(input.periodo, today);
     if (!resolved) {
-      throw new Error(
+      throw new AgentGuidanceError(
         `não entendi o período "${input.periodo}". Peça ao usuário as datas exatas ou use uma ` +
         `expressão como "mês passado", "últimos 30 dias" ou "fevereiro de 2026".`,
       );
     }
+    // `resolvePeriodPhrase` só produz janelas de tamanho fixo (dias/semanas/
+    // meses de um vocabulário conhecido) — nunca deveria estourar o teto,
+    // mas validamos mesmo assim: mesma trava usada nas rotas HTTP, para que
+    // as duas fronteiras (chat e API) nunca divirjam.
+    assertRange(resolved);
     return { from: resolved.from, to: resolved.to, granularity: input.granularity ?? resolved.granularity };
   }
 
   if (!input.from || !input.to) {
-    throw new Error('informe "periodo" ou o par "from"/"to" em YYYY-MM-DD');
+    throw new AgentGuidanceError('informe "periodo" ou o par "from"/"to" em YYYY-MM-DD');
   }
+  // `from`/`to` explícitos chegam aqui como texto livre do modelo — sem este
+  // teto, um LLM confuso (ou um prompt malicioso via WhatsApp) que devolvesse
+  // "from":"1900-01-01","to":"2100-01-01" varreria a tabela inteira no
+  // Postgres, sem a proteção de `maximumBytesBilled` que o BigQuery tem.
+  assertRange({ from: input.from, to: input.to });
   return { from: input.from, to: input.to, granularity: input.granularity ?? 'day' };
 }
 
@@ -235,14 +275,14 @@ export function buildAgentTools(context: AgentToolContext): ToolSet {
       execute: instrument(context, 'ranking', async (input) => {
         const spec = RANKINGS[input.tipo];
         if (!spec) {
-          throw new Error(`ranking desconhecido: "${input.tipo}". Disponíveis: ${RANKING_NAMES.join(', ')}`);
+          throw new AgentGuidanceError(`ranking desconhecido: "${input.tipo}". Disponíveis: ${RANKING_NAMES.join(', ')}`);
         }
 
         const window = resolveWindow(input, today);
         const payload = await gateway.callTool<Record<string, unknown>>(
           spec.source, spec.tool,
           { from: window.from, to: window.to, limit: input.limite ?? 10, tenant },
-          { cache: spec.tool !== 'failed_orders' && spec.tool !== 'out_of_stock_products', rangeEnd: window.to },
+          { cache: spec.tool !== 'failed_orders', rangeEnd: window.to },
         );
 
         // Algumas ferramentas devolvem `rows`, outras `groups`, `methods` ou
@@ -296,11 +336,16 @@ export function buildAgentTools(context: AgentToolContext): ToolSet {
         const before = resolvePeriodPhrase(input.periodoAnterior, today);
         const current = resolvePeriodPhrase(input.periodoAtual, today);
         if (!before || !current) {
-          throw new Error(
+          throw new AgentGuidanceError(
             `não entendi um dos períodos ("${input.periodoAnterior}" / "${input.periodoAtual}"). ` +
             'Peça as datas exatas ao usuário.',
           );
         }
+        // Mesmo teto de 400 dias das rotas HTTP: `compare_products`/
+        // `compare_events` recebem `periodA`/`periodB` (não `from`/`to` no
+        // nível raiz), então precisam ser checados aqui, não em `resolveWindow`.
+        assertRange(before);
+        assertRange(current);
 
         const isProducts = input.tipo === 'produtos';
         // `compare_products` compara por faturamento (padrão do servidor) — os

@@ -5,7 +5,8 @@ import { correlateMetrics } from '@center/mcp-core';
 import { requireAuth } from '../auth/jwt.js';
 import { resolveTenant } from '../tenant.js';
 import { analyzeAppVersionImpact } from '../analysis/app-version-impact.js';
-import { badRequest, upstreamError, assertRange, BadRequestError } from './metrics.js';
+import { badRequest, upstreamError } from './metrics.js';
+import { assertRange, BadRequestError } from '../range.js';
 import type { AppDeps } from '../deps.js';
 
 const BUSINESS_TIME_ZONE = 'America/Sao_Paulo';

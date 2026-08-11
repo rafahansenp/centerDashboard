@@ -152,6 +152,27 @@ describe('runAgent', () => {
     expect(result.toolCalls).toEqual([]);
   });
 
+  it('logs when the model provider throws, instead of failing completely silently', async () => {
+    // C2: uma ANTHROPIC_API_KEY inválida/expirada faz TODA resposta do
+    // WhatsApp virar o fallback, sem nenhum sinal em log/health-report/
+    // ToolCallLog — porque este catch nunca relança, `whatsapp/worker.ts`
+    // nunca vê a exceção e portanto nunca loga nada. O log precisa acontecer
+    // aqui, na camada que efetivamente pega o erro.
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => { throw new Error('anthropic 401 invalid x-api-key'); },
+      });
+      const result = await runAgent({ ...baseInput, gateway: buildGateway(), model });
+      expect(result.reply).toMatch(/não consegui/i);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const [, loggedError] = errorSpy.mock.calls[0]!;
+      expect(String(loggedError)).toMatch(/401 invalid x-api-key/);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('returns a fallback when the model answers with empty text', async () => {
     const result = await runAgent({ ...baseInput, gateway: buildGateway(), model: textOnlyModel('   ') });
     expect(result.reply).toMatch(/não consegui/i);

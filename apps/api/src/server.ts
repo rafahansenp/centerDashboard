@@ -6,8 +6,6 @@ import type { AppDeps } from './deps.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerMetricRoutes } from './routes/metrics.js';
 import { registerAnalysisRoutes } from './routes/analysis.js';
-// As rotas abaixo nascem em tasks futuras. Descomente o import e a chamada de
-// registro correspondente conforme cada task chega.
 import { registerAttributionRoutes } from './routes/attribution.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerWhatsAppRoutes } from './whatsapp/routes.js';

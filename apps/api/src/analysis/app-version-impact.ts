@@ -1,5 +1,6 @@
 import type { MetricQuery, TenantContext } from '@center/shared';
 import type { MetricGateway } from '@center/mcp-core';
+import { AgentGuidanceError } from '../errors.js';
 
 /** Abaixo de 5% de variação não afirmamos que houve mudança. */
 export const RELEVANCE_THRESHOLD = 0.05;
@@ -64,7 +65,10 @@ export async function analyzeAppVersionImpact(
 
   const elapsed = daysBetween(input.releaseDate, input.today);
   if (elapsed < 0) {
-    throw new Error(`data de lançamento no futuro: ${input.releaseDate}`);
+    // Mensagem própria, não um erro de fonte externa: segura para repassar ao
+    // cliente HTTP (routes/analysis.ts detecta pela substring 'futuro') e ao
+    // modelo do agente (agent/tools.ts detecta por instanceof).
+    throw new AgentGuidanceError(`data de lançamento no futuro: ${input.releaseDate}`);
   }
 
   const before = { from: shiftDays(input.releaseDate, -windowDays), to: shiftDays(input.releaseDate, -1) };

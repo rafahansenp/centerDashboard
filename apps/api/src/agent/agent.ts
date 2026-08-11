@@ -74,9 +74,16 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
 
     const text = result.text.trim();
     return { reply: text === '' ? FALLBACK_REPLY : truncate(text), toolCalls };
-  } catch {
+  } catch (error) {
     // Falha do provedor não pode virar 500 no webhook: o usuário precisa
-    // receber uma mensagem, e a Meta precisa receber 200.
+    // receber uma mensagem, e a Meta precisa receber 200 — por isso este
+    // catch NUNCA relança. Mas engolir o erro em silêncio é exatamente como
+    // uma ANTHROPIC_API_KEY inválida/expirada vira "toda resposta do
+    // WhatsApp é o fallback", sem nenhum sinal em lugar nenhum: o log daqui é
+    // a ÚNICA visibilidade que existe, porque `whatsapp/worker.ts` só loga
+    // quando `runAgent` lança — o que ele nunca faz, precisamente por causa
+    // deste catch.
+    console.error('runAgent: provedor de modelo falhou, devolvendo resposta de fallback', error);
     return { reply: FALLBACK_REPLY, toolCalls };
   }
 }

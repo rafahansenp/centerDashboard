@@ -1,4 +1,4 @@
-import type { MetricGateway } from '@center/mcp-core';
+import { McpToolError, type MetricGateway } from '@center/mcp-core';
 import type { MetricSeries, TenantContext } from '@center/shared';
 import { buildAgentTools, type AgentToolCall } from '../agent/tools.js';
 
@@ -115,14 +115,58 @@ describe('consultar_metrica', () => {
     expect(result.erro).toMatch(/informe/i);
   });
 
-  it('turns a gateway failure into an error object the model can read', async () => {
+  it('turns a gateway failure into a generic error object for the model, never the raw upstream text', async () => {
+    // C3: antes, `instrument` devolvia `error.message` cru ao modelo — um
+    // texto de upstream (aqui simulado por uma mensagem genérica de rede)
+    // chegava ao contexto do LLM, ao invés de uma mensagem genérica.
     const gateway = buildGateway({
       queryMetric: jest.fn(async () => { throw new Error('Uappi respondeu 503'); }),
     });
     const result = await tools(gateway).consultar_metrica.execute!(
       { metricId: 'commerce.revenue', periodo: 'hoje' }, {} as never,
     ) as Record<string, unknown>;
-    expect(result.erro).toContain('Uappi respondeu 503');
+    expect(result.erro).not.toContain('Uappi respondeu 503');
+    expect(typeof result.erro).toBe('string');
+  });
+
+  it('scrubs an McpToolError (Prisma/host details) before it reaches the model, but still logs the real message for audit', async () => {
+    // C3: um McpToolError carrega o texto VERBATIM do servidor MCP — pode
+    // nomear tabelas e o host do datasource. Isso nunca pode chegar ao
+    // modelo (e daí ao WhatsApp), mas precisa continuar visível no log de
+    // auditoria (`ToolCallLog.errorMessage`) para diagnóstico no servidor.
+    const upstreamMessage =
+      'Prisma: connection to database "center" at host db.internal.corp:5432 failed: ECONNREFUSED';
+    const gateway = buildGateway({
+      queryMetric: jest.fn(async () => {
+        throw new McpToolError('commerce', 'consultar_metrica', upstreamMessage);
+      }),
+    });
+    const logs: AgentToolCall[] = [];
+    const result = await tools(gateway, (log) => logs.push(log)).consultar_metrica.execute!(
+      { metricId: 'commerce.revenue', periodo: 'hoje' }, {} as never,
+    ) as Record<string, unknown>;
+
+    expect(result.erro).not.toMatch(/db\.internal\.corp|Prisma|center/);
+    expect(logs[0]?.errorMessage).toContain('db.internal.corp');
+  });
+
+  it('still lets an intentional guidance error (unresolved period) reach the model unscrubbed', async () => {
+    const result = await tools(buildGateway()).consultar_metrica.execute!(
+      { metricId: 'commerce.revenue', periodo: 'na época da promoção' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result.erro).toMatch(/não entendi o período/i);
+  });
+
+  it('rejects an explicit from/to range longer than 400 days instead of querying an unbounded window', async () => {
+    // C1: `resolveWindow` nunca chamava `assertRange` para from/to explícitos
+    // — um LLM (ou um prompt malicioso via WhatsApp) devolvendo um intervalo
+    // de séculos chegava direto ao gateway, sem o teto que as rotas HTTP têm.
+    const gateway = buildGateway();
+    const result = await tools(gateway).consultar_metrica.execute!(
+      { metricId: 'commerce.revenue', from: '1900-01-01', to: '2100-01-01' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result.erro).toMatch(/400 dias/);
+    expect(gateway.queryMetric).not.toHaveBeenCalled();
   });
 
   it('reports every call to the audit callback, including failures', async () => {
@@ -285,6 +329,18 @@ describe('comparar_periodos', () => {
       { tipo: 'eventos', periodoAnterior: 'mês passado', periodoAtual: 'este mês' }, {} as never,
     );
     expect(gateway.callTool).toHaveBeenCalledWith('ga4', 'compare_events', expect.anything(), expect.anything());
+  });
+
+  it('rejects a period longer than 400 days instead of sending an unbounded periodA to compare_products', async () => {
+    // C1: `compare_products`/`compare_events` recebem `periodA`/`periodB`
+    // (não `from`/`to` no nível raiz) — o teto de 400 dias precisa ser
+    // checado explicitamente aqui, não só em `resolveWindow`.
+    const gateway = buildGateway();
+    const result = await tools(gateway).comparar_periodos.execute!(
+      { tipo: 'produtos', periodoAnterior: 'últimos 500 dias', periodoAtual: 'este mês' }, {} as never,
+    ) as Record<string, unknown>;
+    expect(result.erro).toMatch(/400 dias/);
+    expect(gateway.callTool).not.toHaveBeenCalled();
   });
 
   it('returns an error object instead of throwing when a period phrase is not understood', async () => {
