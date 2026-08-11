@@ -48,9 +48,14 @@ describe('parseProvisionEnv', () => {
 });
 
 /** Fake mínimo o bastante para exercitar provisionFirstAdmin sem Postgres real. */
-function fakePrisma(options: { existingUsers: number; failUserCreateWith?: { code: string } }): {
+function fakePrisma(options: {
+  existingUsers: number;
+  existingOrganizations?: number;
+  failUserCreateWith?: { code: string };
+}): {
   prisma: ProvisionPrisma;
   organizationCreate: jest.Mock;
+  organizationCount: jest.Mock;
   userCreate: jest.Mock;
 } {
   let nextOrgId = 1;
@@ -60,6 +65,7 @@ function fakePrisma(options: { existingUsers: number; failUserCreateWith?: { cod
     id: `org_${nextOrgId++}`,
     name: args.data.name,
   }));
+  const organizationCount = jest.fn(async () => options.existingOrganizations ?? 0);
 
   const userCreate = jest.fn(async (args: { data: { email: string } }) => {
     if (options.failUserCreateWith) {
@@ -72,7 +78,7 @@ function fakePrisma(options: { existingUsers: number; failUserCreateWith?: { cod
 
   const tx = {
     user: { count: jest.fn(async () => options.existingUsers), create: userCreate },
-    organization: { create: organizationCreate },
+    organization: { count: organizationCount, create: organizationCreate },
   };
 
   // Fake fiel o bastante para o propósito do teste: chama o callback com o tx
@@ -82,7 +88,7 @@ function fakePrisma(options: { existingUsers: number; failUserCreateWith?: { cod
     $transaction: (fn) => fn(tx as never),
   };
 
-  return { prisma, organizationCreate, userCreate };
+  return { prisma, organizationCreate, organizationCount, userCreate };
 }
 
 describe('provisionFirstAdmin', () => {
@@ -114,13 +120,29 @@ describe('provisionFirstAdmin', () => {
     expect(userCreate).not.toHaveBeenCalled();
   });
 
+  it('refuses when an organization already exists but no user does (partial provisioning)', async () => {
+    // Reproduz o achado do reviewer: banco com uma Organization mas sem
+    // nenhum User (ex.: um provisionamento anterior que criou a org por fora
+    // deste script, ou um estado de banco herdado). A checagem antiga só
+    // olhava user.count(), então isto passava e criava uma SEGUNDA
+    // organização + admin — exatamente o bug relatado.
+    const { prisma, organizationCreate, userCreate } = fakePrisma({
+      existingUsers: 0, existingOrganizations: 1,
+    });
+
+    await expect(provisionFirstAdmin(prisma, validEnv)).rejects.toThrow(ProvisionRefusedError);
+    await expect(provisionFirstAdmin(prisma, validEnv)).rejects.toThrow(/organiza/i);
+    expect(organizationCreate).not.toHaveBeenCalled();
+    expect(userCreate).not.toHaveBeenCalled();
+  });
+
   it('refuses safely when re-run against an already-provisioned database (second run)', async () => {
     // Simula rodar o script duas vezes: a 1a chamada parte de banco vazio, a
     // 2a enxerga o usuário que a 1a acabou de criar.
     const first = fakePrisma({ existingUsers: 0 });
     await provisionFirstAdmin(first.prisma, validEnv);
 
-    const second = fakePrisma({ existingUsers: 1 });
+    const second = fakePrisma({ existingUsers: 1, existingOrganizations: 1 });
     await expect(provisionFirstAdmin(second.prisma, validEnv)).rejects.toThrow(/já existem 1 usuário/);
     expect(second.organizationCreate).not.toHaveBeenCalled();
   });

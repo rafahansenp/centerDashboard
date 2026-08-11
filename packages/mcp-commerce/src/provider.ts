@@ -30,12 +30,16 @@ const DESCRIPTORS: MetricDescriptor[] = [
   {
     id: 'commerce.new_customers', label: 'Clientes novos',
     description:
-      'Clientes cujo primeiro pedido com status de venda caiu no período. Um cliente ' +
-      'cujo único pedido foi cancelado/falho/aguardando pagamento nunca conta. ' +
-      'Limitação inerente ao horizonte de sincronização: o sync só enxerga pedidos ' +
-      'dentro da janela de backfill (90 dias por padrão) — um cliente com histórico ' +
-      'anterior a essa janela pode aparecer como "novo" mesmo não sendo, porque o ' +
-      'sync nunca viu o pedido real mais antigo dele.',
+      'Clientes cujo pedido cronologicamente mais antigo (firstOrderAt) caiu no ' +
+      'período E tinha status de venda (pago, em separação, enviado ou entregue). ' +
+      'Não é "o primeiro pedido pago do cliente": é o status do pedido mais antigo ' +
+      'dele, ponto. Se esse pedido mais antigo foi cancelado, falhou ou ficou ' +
+      'aguardando pagamento, o cliente nunca conta como novo — mesmo que ele tenha ' +
+      'feito um pedido pago depois. Limitação inerente ao horizonte de ' +
+      'sincronização: o sync só enxerga pedidos dentro da janela de backfill (90 ' +
+      'dias por padrão) — um cliente com histórico anterior a essa janela pode ' +
+      'aparecer como "novo" mesmo não sendo, porque o sync nunca viu o pedido real ' +
+      'mais antigo dele.',
     source: 'commerce', unit: 'count', dimensions: [],
   },
 ];

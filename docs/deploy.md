@@ -57,15 +57,33 @@ quatro variáveis acima são obrigatórias e validadas (mesmo padrão Zod de
 `src/config.ts`); faltando ou inválida alguma, ele recusa antes de tocar no banco
 e lista todos os problemas de uma vez.
 
-**Idempotente, mas conservador: recusa em vez de sobrescrever.** Se o banco já tem
-qualquer usuário — seja porque este comando já rodou antes, seja por qualquer outro
-motivo — o script recusa (saída não-zero, "recusado: já existem N usuário(s)...") e
-**não altera nada**: não troca senha, não cria uma segunda organização, não faz
-upsert por e-mail. Rodar o comando de novo por engano (segunda vez, ou contra o
-banco errado) é seguro — na pior hipótese, é um no-op que avisa. A checagem e as
-duas escritas (organização + admin) rodam na mesma transação: se uma corrida
-concorrente (duas execuções simultâneas) colidir no e-mail, a organização criada
-naquela chamada específica é desfeita junto — nunca fica um registro órfão.
+**Idempotente, mas conservador: recusa em vez de sobrescrever.** O script checa
+tanto usuários quanto organizações antes de escrever, e recusa se qualquer um dos
+dois já existir:
+
+- **Qualquer usuário já existe** — seja porque este comando já rodou antes, seja
+  por qualquer outro motivo — recusa com saída não-zero
+  ("recusado: já existem N usuário(s)...").
+- **Uma organização já existe mas nenhum usuário** (banco em estado parcial —
+  por exemplo uma organização criada por fora deste script) — recusa também,
+  com uma mensagem própria ("recusado: já existe(m) N organização(ões)... mas
+  nenhum usuário..."). Sem esta segunda checagem, o script criaria uma
+  SEGUNDA organização a cada execução enquanto nenhum usuário existisse.
+
+Em ambos os casos, **nada é alterado**: não troca senha, não cria uma segunda
+organização, não faz upsert por e-mail. Rodar o comando de novo por engano
+(segunda vez, ou contra o banco errado) é seguro — na pior hipótese, é um no-op
+que avisa. A checagem e as duas escritas (organização + admin) rodam na mesma
+transação: se uma corrida concorrente (duas execuções simultâneas) colidir no
+e-mail, a organização criada naquela chamada específica é desfeita junto — nunca
+fica um registro órfão.
+
+Isso não elimina toda corrida possível: duas execuções verdadeiramente
+simultâneas contra um banco igualmente vazio, com e-mails DIFERENTES, ainda
+podem ambas passar pela checagem (READ COMMITTED não é uma trava) e ambas
+criar organização + admin — só o índice único de e-mail do usuário barra o
+caso de mesmo e-mail. Esse cenário é aceito como operacional: rode o
+provisionamento uma única vez, de um único lugar.
 
 Para adicionar organizações/usuários adicionais depois do primeiro admin, use a
 própria aplicação já provisionada (não há hoje uma segunda rota/script para isso —

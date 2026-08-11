@@ -25,11 +25,24 @@ const DEFAULT_WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../we
 // coincidentemente, um arquivo estático de verdade: se uma rota real sob um
 // desses prefixos não bater em nenhum handler registrado, o cliente precisa
 // ver um 404 de API (JSON), não a index.html do dashboard.
-const RESERVED_PREFIXES = ['/api/', '/auth/', '/public/', '/webhooks/'];
+//
+// Sem barra final de propósito (ex.: '/api', não '/api/'), e comparado em
+// minúsculas: o roteador do Fastify (find-my-way) é sensível a maiúsculas e
+// não faz normalização de prefixo, então `GET /api` (sem nada depois), `GET
+// /apifoo` (prefixo "colado", sem barra) e `GET /API/metrics/catalog` (case
+// diferente) nunca batem em nenhuma rota registrada — mas TÊM cara de rota de
+// API. Cair no fallback de SPA nesses casos devolveria 200 + HTML do
+// dashboard para um cliente de API, exatamente o "mascarar erro de API como
+// HTML" que este fallback existe para evitar. Nenhuma rota real do
+// react-router (ver apps/web/src/App.tsx: '/', '/login', '/produtos',
+// '/aquisicao', '/configuracoes') começa com um destes prefixos, então este
+// matching mais amplo não engole rota nenhuma do dashboard.
+const RESERVED_PREFIXES = ['/api', '/auth', '/public', '/webhooks'];
 const RESERVED_EXACT = new Set(['/health']);
 
 function isReservedPath(pathname: string): boolean {
-  return RESERVED_EXACT.has(pathname) || RESERVED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  const lower = pathname.toLowerCase();
+  return RESERVED_EXACT.has(lower) || RESERVED_PREFIXES.some((prefix) => lower.startsWith(prefix));
 }
 
 export async function buildServer(deps: AppDeps, opts: { webRoot?: string } = {}): Promise<FastifyInstance> {

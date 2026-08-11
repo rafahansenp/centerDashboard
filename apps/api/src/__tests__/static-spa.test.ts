@@ -119,4 +119,52 @@ describe('static dashboard + SPA fallback', () => {
     expect(response.headers['content-type']).toMatch(/application\/json/);
     await app.close();
   });
+
+  // Achado do review: o matching antigo exigia a barra final ("/api/") e era
+  // sensível a maiúsculas/minúsculas, então um cliente de API que bate num
+  // prefixo "pelado" ou com case errado recebia a index.html do dashboard com
+  // 200 — exatamente o "mascarar erro de API como HTML" que este fallback
+  // deveria evitar.
+  it('returns a JSON 404 for the bare /api prefix (no trailing slash)', async () => {
+    const app = await buildTestServer(webRoot);
+    const response = await app.inject({ method: 'GET', url: '/api' });
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    await app.close();
+  });
+
+  it('returns a JSON 404 for the bare /auth prefix (no trailing slash)', async () => {
+    const app = await buildTestServer(webRoot);
+    const response = await app.inject({ method: 'GET', url: '/auth' });
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    await app.close();
+  });
+
+  it('returns a JSON 404 for a path merely glued onto the /api prefix (/apifoo)', async () => {
+    const app = await buildTestServer(webRoot);
+    const response = await app.inject({ method: 'GET', url: '/apifoo' });
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    await app.close();
+  });
+
+  it('returns a JSON 404 for a case-mangled reserved prefix (/API/metrics/catalog)', async () => {
+    const app = await buildTestServer(webRoot);
+    const response = await app.inject({ method: 'GET', url: '/API/metrics/catalog' });
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    await app.close();
+  });
+
+  // Não pode over-corrigir: rotas de verdade do dashboard (react-router)
+  // continuam caindo na index.html, mesmo depois de endurecer o matching acima.
+  it('still falls back to index.html for a real dashboard deep link (/aquisicao)', async () => {
+    const app = await buildTestServer(webRoot);
+    const response = await app.inject({ method: 'GET', url: '/aquisicao' });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toMatch(/text\/html/);
+    expect(response.body).toContain('dashboard');
+    await app.close();
+  });
 });
