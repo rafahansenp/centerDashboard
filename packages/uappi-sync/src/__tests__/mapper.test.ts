@@ -329,6 +329,90 @@ describe('mapOrder — preservação do payload', () => {
       expect(serialized).not.toContain('outro@example.com');
     });
 
+    // Revisão final de branch, achado sobre B4: correspondência por
+    // "contém" redige demais. `nome` como fragmento apaga qualquer chave que
+    // contenha a substring, mesmo quando ela não é PII nenhuma —
+    // `nomeProduto`, `nomeCategoria`, `nomeFantasia` etc. são dados de
+    // produto/loja que o rawPayload existe para preservar.
+    it('does NOT redact non-personal keys that merely contain a PII fragment as a substring (defeito de sobre-redação)', () => {
+      const { order } = map({
+        itens: [
+          {
+            sku: 'CAM-001',
+            descricao: 'Camiseta Preta',
+            categoria: 'Vestuário',
+            quantidade: 1,
+            valorUnitario: 10,
+            valorTotal: 10,
+            nomeProduto: 'Camiseta Preta Premium',
+            nomeCategoria: 'Vestuário Masculino',
+            nomeTransportadora: 'Correios',
+          },
+        ],
+        nomeFantasia: 'Loja da Ana Ltda',
+        nomeStatus: 'Pagamento aprovado',
+        enderecoLoja: 'Av. Paulista, 1000',
+      });
+      const payload = order.rawPayload as Record<string, unknown> & {
+        itens?: Array<Record<string, unknown>>;
+      };
+
+      expect(payload.nomeFantasia).toBe('Loja da Ana Ltda');
+      expect(payload.nomeStatus).toBe('Pagamento aprovado');
+      expect(payload.enderecoLoja).toBe('Av. Paulista, 1000');
+      expect(payload.itens?.[0]?.nomeProduto).toBe('Camiseta Preta Premium');
+      expect(payload.itens?.[0]?.nomeCategoria).toBe('Vestuário Masculino');
+      expect(payload.itens?.[0]?.nomeTransportadora).toBe('Correios');
+    });
+
+    // Achado sobre B4: correspondência por "contém" também redige de menos —
+    // chaves plausíveis de PII num payload brasileiro que não contêm
+    // nenhum dos fragmentos originais (`email`, `documento`, `cpf`, `cnpj`,
+    // `nome`, `razaosocial`, `telefone`, `celular`, `fone`, `endereco`,
+    // `logradouro`, `complemento`, `bairro`, `cep`) escapavam intactas.
+    it('DOES redact plausible Brazilian PII keys the old fragment list missed, including nested and mis-cased (defeito de sub-redação)', () => {
+      const { order } = map({
+        whatsapp: '11988887777',
+        rg: '12.345.678-9',
+        cliente: {
+          idCliente: 555,
+          email: 'ana@example.com',
+          documento: '123.456.789-09',
+          contato: 'Ana Silva',
+          titular: 'Ana Silva Souza',
+          inscricaoEstadual: '123.456.789.110',
+          dataNascimento: '1990-05-20',
+        },
+        entrega: {
+          DESTINATARIO: 'Carlos Souza',
+          Cartao: '4111 1111 1111 1111',
+          Observacao: 'Deixar com o porteiro, tel 11988887777',
+        },
+      });
+      const serialized = JSON.stringify(order.rawPayload);
+
+      expect(serialized).not.toContain('11988887777');
+      expect(serialized).not.toContain('12.345.678-9');
+      expect(serialized).not.toContain('Ana Silva');
+      expect(serialized).not.toContain('Ana Silva Souza');
+      expect(serialized).not.toContain('123.456.789.110');
+      expect(serialized).not.toContain('1990-05-20');
+      expect(serialized).not.toContain('Carlos Souza');
+      expect(serialized).not.toContain('4111 1111 1111 1111');
+      expect(serialized).not.toContain('Deixar com o porteiro');
+
+      const payload = order.rawPayload as {
+        whatsapp?: unknown;
+        rg?: unknown;
+        entrega?: Record<string, unknown>;
+      };
+      expect(payload.whatsapp).toBe('[REDACTED]');
+      expect(payload.rg).toBe('[REDACTED]');
+      expect(payload.entrega?.DESTINATARIO).toBe('[REDACTED]');
+      expect(payload.entrega?.Cartao).toBe('[REDACTED]');
+      expect(payload.entrega?.Observacao).toBe('[REDACTED]');
+    });
+
     it('still hashes the real (pre-redaction) cliente values, not the redacted placeholder', () => {
       // A ordem importa: o redator roda sobre uma CÓPIA, depois que o hashing
       // já leu os valores reais — nunca o inverso, senão emailHash/

@@ -115,39 +115,98 @@ function mapCustomer(order: UappiOrder, pseudonymizer: Pseudonymizer): MappedCus
 const PII_REDACTED = '[REDACTED]';
 
 /**
- * Fragmentos de nome de chave (já normalizados: minúsculos, sem acento, sem
- * separador) que indicam dado pessoal. Correspondência por "contém", não
- * igualdade exata — a Uappi varia o nome do campo por loja/endpoint, então
- * `email`, `emailCliente`, `clienteEmail` precisam todos cair aqui.
+ * Nomes de chave (já normalizados: minúsculos, sem acento, sem separador)
+ * que indicam dado pessoal. Igualdade EXATA contra este conjunto — não mais
+ * correspondência por "contém" (achado da revisão final de verificação de
+ * branch sobre o redator recursivo introduzido no commit 1245a8b).
  *
- * Substitui o denylist fixo de 3 campos da T8 (achado B4 da revisão final de
- * branch): aquele denylist só cobria `cliente.email/documento/nomeRazao`, mas
- * payloads reais de detalhe de pedido da Uappi trazem `entrega`/
- * `enderecoEntrega` com nome, telefone e endereço completos NO NÍVEL RAIZ do
- * pedido, fora de `cliente` inteiramente — e `CustomerSchema`/
- * `UappiOrderSchema` são `.passthrough()`, então nenhum desses campos é
- * barrado pelo schema.
+ * Por que a troca: correspondência por substring redigia de mais E de menos
+ * ao mesmo tempo, confirmado rodando `mapOrder` de verdade.
+ *  - De mais: o fragmento "nome" apagava `nomeProduto`, `nomeCategoria`,
+ *    `nomeTransportadora`, `nomeFantasia`, `nomeStatus`; "endereco" apagava
+ *    `enderecoLoja`. Nenhum desses é PII — são exatamente os dados de
+ *    produto/categoria/transportadora/loja que `rawPayload` existe para
+ *    preservar para reprocessamento offline. Uma loja cujo endpoint de
+ *    detalhe de pedido nomeia os campos de produto `nomeProduto` (a Uappi
+ *    varia o nome do campo por loja/endpoint — daí `CustomerSchema`/
+ *    `UappiOrderSchema` serem `.passthrough()`) sincroniza e perde todo
+ *    produto/categoria/transportadora do payload arquivado.
+ *  - De menos: nenhum fragmento da lista antiga aparecia dentro de
+ *    `whatsapp`, `contato`, `rg`, `inscricaoEstadual`, `dataNascimento`,
+ *    `destinatario`, `titular`, `cartao`, `observacao`, `ip` — todos
+ *    plausíveis num payload de e-commerce brasileiro, e todos escapavam
+ *    intactos para o banco.
+ *
+ * Este conjunto é curado, não mecanicamente copiado de uma lista de
+ * achados: lista o nome completo normalizado de cada campo (incluindo
+ * variantes compostas óbvias, como `nomeRazao`/`enderecoEntrega`/
+ * `telefoneCelular`), porque igualdade exata não "olha para dentro" de um
+ * nome composto — só listar o fragmento base ("nome", "endereco",
+ * "telefone") não bastaria para casar essas variantes reais.
+ *
+ * Duas decisões de zona cinzenta, tomadas deliberadamente:
+ *  - `ip` e `observacao`/`observacoes` ENTRAM: um IP é dado pessoal sob a
+ *    LGPD (identifica dispositivo/pessoa), e um campo de observação livre
+ *    em payload de e-commerce brasileiro comumente carrega telefone/
+ *    endereço anotado à mão por um atendente. Nenhum dos dois alimenta o
+ *    reprocessamento dos campos MODELADOS (pedido, itens, dinheiro,
+ *    status) — perder o valor bruto deles não quebra nada que
+ *    `rawPayload` precise reconstruir.
+ *  - `numero` FICA DE FORA, propositalmente: é ambíguo entre "número da
+ *    casa" (dado pessoal, mas dentro de um objeto de endereço que já é
+ *    redigido por inteiro via `endereco`/`enderecoEntrega`) e "número de
+ *    pedido/item/rastreio" (dado operacional que o reprocessamento existe
+ *    para ler). Redigir a chave nua `numero` arrisca reproduzir o Defeito 1
+ *    (sobre-redação) num campo usado para agrupar/relatar. Prefere-se o
+ *    risco remoto de um número de casa isolado sobreviver (sem nome/rua ao
+ *    redor, já que o objeto-pai de endereço é redigido por inteiro) a
+ *    apagar dado operacional do pedido.
+ *
+ * Tradeoff aceito conscientemente: igualdade exata não pega uma chave nova
+ * de PII que a Uappi passe a mandar amanhã sob um nome fora deste conjunto
+ * (ex.: `celularWhats`) — diferente do fragmento antigo, que ao menos pegava
+ * variantes desconhecidas contendo uma raiz conhecida. Esse é o preço de
+ * parar de apagar dado que não é PII. Quem fecha essa lacuna é a pendência
+ * manual já registrada no ledger da feature ("validar contra um pedido REAL
+ * da Uappi" — ver `progress.md`, decisão "PII no rawPayload: endurecer
+ * agora"): é ela quem deve revelar nomes de campo reais ainda não cobertos
+ * aqui, não uma tentativa de adivinhar todo nome futuro por substring.
  */
-const PII_KEY_FRAGMENTS = [
-  'email',
-  'documento', 'cpf', 'cnpj',
-  'nome', 'razaosocial',
-  'telefone', 'celular', 'fone',
-  'endereco', 'logradouro', 'complemento', 'bairro', 'cep',
-] as const;
+const PII_EXACT_KEYS = new Set<string>([
+  // Identidade
+  'nome', 'nomecompleto', 'nomecliente', 'nomerazao', 'razaosocial', 'nomerazaosocial',
+  'nomedestinatario', 'destinatario', 'titular', 'nometitular', 'nomecontato', 'contato',
+
+  // Documento
+  'cpf', 'cnpj', 'documento', 'documentocliente', 'rg',
+  'inscricaoestadual', 'datanascimento', 'nascimento',
+
+  // Contato
+  'email', 'emailcliente', 'emailsecundario', 'emailcontato',
+  'telefone', 'telefonecelular', 'telefonecontato', 'celular', 'fone', 'fonecelular', 'whatsapp',
+
+  // Endereço
+  'endereco', 'enderecoentrega', 'enderecocliente', 'enderecofaturamento', 'enderecocobranca',
+  'logradouro', 'complemento', 'bairro', 'cep',
+
+  // Instrumento de pagamento
+  'cartao', 'numerocartao', 'cartaocredito', 'dadoscartao', 'cvv', 'titularcartao',
+
+  // Zona cinzenta resolvida a favor da redação (ver justificativa acima)
+  'ip', 'observacao', 'observacoes',
+]);
 
 /** Minúsculo, sem acento, sem separador — casa `Nome`, `nome_razao`, `telefoneCelular`, `RAZAO-SOCIAL`… */
 function normalizeKeyForPiiMatch(key: string): string {
   return key
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 }
 
 function isPiiKey(key: string): boolean {
-  const normalized = normalizeKeyForPiiMatch(key);
-  return PII_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+  return PII_EXACT_KEYS.has(normalizeKeyForPiiMatch(key));
 }
 
 /**
