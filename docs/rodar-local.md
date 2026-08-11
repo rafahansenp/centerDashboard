@@ -83,24 +83,71 @@ WHATSAPP_PHONE_NUMBER_ID="placeholder"
 > caem em `false` silenciosamente e o sistema vai tentar falar com a Uappi/GA4
 > de verdade.
 
-### Passo 3: instalar, migrar e compilar
+### Passo 3: carregar o `.env` no terminal
+
+⚠️ **Nada neste projeto lê o `.env` sozinho** — nem a API, nem o Prisma. O
+Prisma até procura um `.env`, mas em `apps/api/`, e o nosso está na raiz do
+repositório. Sem este passo, o próximo comando falha com
+`Environment variable not found: DATABASE_URL`.
+
+Entre em `apps/api` e carregue as variáveis:
+
+**bash / Git Bash / WSL:**
+
+```bash
+cd apps/api
+set -a && . ../../.env && set +a
+```
+
+**PowerShell:**
+
+```powershell
+Set-Location apps\api
+Get-Content ..\..\.env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object {
+  $name, $value = $_ -split '=', 2
+  Set-Item -Path "env:$($name.Trim())" -Value $value.Trim('"', ' ')
+}
+```
+
+Confira que carregou:
+
+```bash
+echo $DATABASE_URL          # bash
+echo $env:DATABASE_URL      # PowerShell
+```
+
+> Isso vale **só para o terminal atual**. Cada terminal novo que você abrir para
+> rodar a API, o worker ou o Prisma precisa repetir este passo. É por isso que
+> ele aparece de novo nos passos seguintes.
+
+### Passo 4: instalar, migrar e compilar
+
+No mesmo terminal do passo anterior:
 
 ```bash
 pnpm install
-pnpm --filter @center/api exec prisma generate
-pnpm --filter @center/api exec prisma migrate deploy
-pnpm build
+pnpm exec prisma generate
+pnpm exec prisma migrate deploy
+cd ../.. && pnpm build
 ```
+
+Você deve ver `No pending migrations to apply.` ou a lista de migrações
+aplicadas.
 
 O `pnpm build` compila os 11 pacotes, inclusive os três servidores MCP que a API
 executa como processos filhos e o `apps/web/dist` que a API serve como painel.
 
-### Passo 4: criar o primeiro usuário
+> O aviso `The configuration property package.json#prisma is deprecated` é
+> esperado e inofensivo — o Prisma 6 ainda aceita, e migrar para
+> `prisma.config.ts` é assunto para outra hora.
 
-Existem dois caminhos. Para desenvolvimento local, o seed é mais rápido:
+### Passo 5: criar o primeiro usuário
+
+Existem dois caminhos. Para desenvolvimento local, o seed é mais rápido (no
+terminal com o `.env` já carregado, dentro de `apps/api`):
 
 ```bash
-pnpm --filter @center/api db:seed
+pnpm db:seed
 ```
 
 Isso cria a organização `org_dev` e o login **`admin@center.local` /
@@ -120,26 +167,16 @@ Isso cria a organização `org_dev` e o login **`admin@center.local` /
 >   pnpm provision:admin
 > ```
 
-### Passo 5: subir a API
+### Passo 6: subir a API
 
-⚠️ **A API não lê o `.env` sozinha.** Ela valida `process.env` direto, então
-você precisa exportar as variáveis antes de iniciar:
+No terminal com o `.env` carregado (Passo 3), dentro de `apps/api`:
 
 ```bash
-cd apps/api
-set -a && . ../../.env && set +a
 pnpm start
 ```
 
-No PowerShell, em vez do `set -a`:
-
-```powershell
-Get-Content ..\..\.env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object {
-  $name, $value = $_ -split '=', 2
-  Set-Item -Path "env:$($name.Trim())" -Value $value.Trim('"', ' ')
-}
-pnpm start
-```
+Se você abriu um terminal novo, carregue o `.env` de novo antes — a API valida
+`process.env` direto e recusa subir listando todas as variáveis faltantes.
 
 Confirme que subiu:
 
@@ -154,7 +191,7 @@ curl http://localhost:3333/health     # {"status":"ok"}
 > Use sempre `pnpm build` + `pnpm start`. Pelo mesmo motivo, `pnpm dev` na raiz
 > também não funciona para a API.
 
-### Passo 6: abrir o painel
+### Passo 7: abrir o painel
 
 Você tem duas opções.
 
@@ -178,14 +215,14 @@ na 3333.
 > `/webhooks/*` não são redirecionadas — se você precisar testá-las, use a porta
 > 3333 direto (Opção A).
 
-### Passo 7 (opcional): sincronizar dados
+### Passo 8 (opcional): sincronizar dados
 
 Em modo mock o painel já mostra dados de fixture. Para exercitar o pipeline de
 sincronização:
 
 ```bash
 cd apps/api
-set -a && . ../../.env && set +a
+set -a && . ../../.env && set +a   # PowerShell: veja o Passo 3
 pnpm start:sync
 ```
 
@@ -240,7 +277,7 @@ O worker é um processo separado da API. Em outro terminal:
 
 ```bash
 cd apps/api
-set -a && . ../../.env && set +a
+set -a && . ../../.env && set +a   # PowerShell: veja o Passo 3
 pnpm start:whatsapp
 ```
 
@@ -282,10 +319,12 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 
 | Sintoma | Causa | Solução |
 |---|---|---|
-| `Configuração inválida — DATABASE_URL: Required…` | O `.env` não foi exportado para o shell | Rode o `set -a && . ../../.env && set +a` do Passo 5 |
+| `Configuração inválida — DATABASE_URL: Required…` | O `.env` não foi carregado neste terminal | Refaça o Passo 3 |
+| Prisma: `Environment variable not found: DATABASE_URL` | Idem — o Prisma procura o `.env` em `apps/api/`, não na raiz | Refaça o Passo 3 antes de rodar o Prisma |
+| `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prisma" not found` | Mensagem enganosa do pnpm: o Prisma **foi** encontrado e falhou por outro motivo | Leia o erro logo acima dela — quase sempre é o `DATABASE_URL` |
 | `ERR_MODULE_NOT_FOUND … config.js` | Você usou `pnpm dev` na `apps/api` | Use `pnpm build` + `pnpm start` |
 | `Can't reach database server at localhost:5432` | Docker parado | `docker compose up -d` |
-| Login não aceita nada | Banco sem usuário | Passo 4 (seed ou provisionamento) |
+| Login não aceita nada | Banco sem usuário | Passo 5 (seed ou provisionamento) |
 | Painel abre mas os números vêm zerados | Sem dados sincronizados | Confirme `MOCK_EXTERNAL_APIS="true"` (literal) ou rode o sync |
 | A Meta recusa o webhook | Verify token diferente | O valor no painel da Meta tem que ser idêntico ao do `.env` |
 | Bot responde "não encontrei este número" | Número não vinculado | Passo 5 da Parte 2 |
@@ -296,7 +335,7 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 
 ```bash
 cd apps/api
-set -a && . ../../.env && set +a
+set -a && . ../../.env && set +a   # PowerShell: veja o Passo 3
 pnpm health:report
 ```
 
