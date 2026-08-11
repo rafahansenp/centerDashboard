@@ -167,19 +167,48 @@ Sucesso é a linha `seed concluído: admin@center.local / center-dev-123`.
 Isso cria a organização `org_dev` e o login **`admin@center.local` /
 `center-dev-123`**.
 
-> ⚠️ **Nunca use o seed fora da sua máquina** — essa senha está publicada neste
-> repositório. Para qualquer ambiente compartilhado, use o provisionamento, que
-> exige uma senha sua de 12+ caracteres e se recusa a rodar num banco que já
-> tenha organização ou usuário:
+⚠️ **Nunca use o seed fora da sua máquina** — essa senha está publicada neste
+repositório. Para qualquer ambiente compartilhado, use o provisionamento, que
+exige uma senha sua de 12+ caracteres e se recusa a rodar num banco que já tenha
+organização ou usuário.
+
+Ele roda pelo **compilado**, não pelo script `pnpm provision:admin` (veja a nota
+sobre `--experimental-strip-types` logo abaixo):
+
+```bash
+PROVISION_ORG_NAME="Minha Loja" \
+PROVISION_ADMIN_NAME="Rafael" \
+PROVISION_ADMIN_EMAIL="rafael@exemplo.com" \
+PROVISION_ADMIN_PASSWORD="uma-senha-longa-de-verdade" \
+  node dist/scripts/provision-admin.js
+```
+
+No PowerShell, defina as quatro com `$env:` antes de chamar o `node`.
+
+Num banco que já tem usuário (por exemplo, depois do seed) ele recusa de
+propósito, e isso é sinal de que está funcionando:
+
+```
+recusado: já existem 1 usuário(s) no banco — este script só provisiona
+a primeira instalação (banco vazio). Nada foi alterado.
+```
+
+> ⚠️ **Os scripts `pnpm provision:admin`, `health:report`, `warm:cache` e
+> `eval:agent` estão quebrados no Node 22.** Todos usam
+> `--experimental-strip-types`, que remove tipos mas **não** remapeia imports
+> `./x.js` para o `.ts` irmão — então morrem com `ERR_MODULE_NOT_FOUND` antes de
+> executar qualquer coisa. É a mesma dívida técnica dos scripts `dev`.
+> **Use sempre a versão em `dist/scripts/`**, que o `pnpm -w build` gera:
 >
-> ```bash
-> cd apps/api
-> PROVISION_ORG_NAME="Minha Loja" \
-> PROVISION_ADMIN_NAME="Rafael" \
-> PROVISION_ADMIN_EMAIL="rafael@exemplo.com" \
-> PROVISION_ADMIN_PASSWORD="uma-senha-longa-de-verdade" \
->   pnpm provision:admin
-> ```
+> | Em vez de | Use |
+> |---|---|
+> | `pnpm provision:admin` | `node dist/scripts/provision-admin.js` |
+> | `pnpm health:report` | `node dist/scripts/health-report.js` |
+> | `pnpm warm:cache` | `node dist/scripts/warm-cache.js` |
+> | `pnpm eval:agent` | `node dist/scripts/eval-agent.js` |
+>
+> O `pnpm db:seed` é a exceção e funciona normalmente: ele importa de `dist/`,
+> não de um `.ts` irmão.
 
 ### Passo 6: subir a API
 
@@ -337,7 +366,8 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 | Prisma: `Environment variable not found: DATABASE_URL` | Idem — o Prisma procura o `.env` em `apps/api/`, não na raiz | Refaça o Passo 3 antes de rodar o Prisma |
 | `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prisma" not found` | Mensagem enganosa do pnpm: o Prisma **foi** encontrado e falhou por outro motivo | Leia o erro logo acima dela — quase sempre é o `DATABASE_URL` |
 | `Command "db:seed" not found` / `a sintaxe do nome do arquivo... está incorreta` | Você está na raiz; `db:seed`, `start`, `start:sync` e `start:whatsapp` só existem em `apps/api` | `cd apps/api` (e recarregue o `.env` se for terminal novo) |
-| `ERR_MODULE_NOT_FOUND … config.js` | Você usou `pnpm dev` na `apps/api` | Use `pnpm build` + `pnpm start` |
+| `ERR_MODULE_NOT_FOUND … config.js` | Você usou `pnpm dev` na `apps/api` | Use `pnpm -w build` + `pnpm start` |
+| `ERR_MODULE_NOT_FOUND … scripts/lib/….js` ou `… src/config.js` ao rodar um script | `--experimental-strip-types` não resolve `.js` → `.ts` irmão | Rode o compilado: `node dist/scripts/<nome>.js` (tabela no Passo 5) |
 | `Can't reach database server at localhost:5432` | Docker parado | `docker compose up -d` |
 | Login não aceita nada | Banco sem usuário | Passo 5 (seed ou provisionamento) |
 | Painel abre mas os números vêm zerados | Sem dados sincronizados | Confirme `MOCK_EXTERNAL_APIS="true"` (literal) ou rode o sync |
@@ -351,12 +381,19 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 ```bash
 cd apps/api
 set -a && . ../../.env && set +a   # PowerShell: veja o Passo 3
-pnpm health:report
+node dist/scripts/health-report.js
 ```
 
 Ele avisa se o sync parou, se a fila do WhatsApp está crescendo, se as chamadas
 de ferramenta estão falhando — e se você está em modo mock, porque nesse caso os
-números que você está vendo são fixture, não dados reais.
+números que você está vendo são fixture, não dados reais. Numa máquina de
+desenvolvimento é normal ver algo assim:
+
+```
+PROBLEMAS DETECTADOS:
+ - MOCK_EXTERNAL_APIS está ligado — os dados servidos são fixtures, não reais
+ - sync de "Loja de Desenvolvimento" parado há 6524 minutos
+```
 
 ---
 
