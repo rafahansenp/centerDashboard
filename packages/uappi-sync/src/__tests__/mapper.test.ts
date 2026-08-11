@@ -253,4 +253,95 @@ describe('mapOrder — preservação do payload', () => {
     expect(payload.cliente?.idCliente).toBe(555);
     expect(payload.cliente?.email).toBe('[REDACTED]');
   });
+
+  // Achado B4 (revisão final de branch): o denylist de 3 campos fixos da T8
+  // só cobria `cliente.email/documento/nomeRazao`. Payloads reais de
+  // detalhe de pedido da Uappi trazem `entrega`/`enderecoEntrega` com nome,
+  // telefone e endereço completos FORA de `cliente` inteiramente — o
+  // redator agora anda a árvore inteira por nome de chave, não uma lista
+  // fixa de posições.
+  describe('redação recursiva de PII (B4)', () => {
+    it('redacts PII nested outside cliente, at any depth (entrega.enderecoEntrega.telefone)', () => {
+      const { order } = map({
+        entrega: {
+          transportadora: 'Correios',
+          prazoDias: 5,
+          enderecoEntrega: {
+            nomeDestinatario: 'Carlos Souza',
+            logradouro: 'Rua das Flores, 123',
+            bairro: 'Centro',
+            cep: '01310-100',
+            telefone: '11988887777',
+          },
+        },
+      });
+      const serialized = JSON.stringify(order.rawPayload);
+
+      expect(serialized).not.toContain('Carlos Souza');
+      expect(serialized).not.toContain('Rua das Flores');
+      expect(serialized).not.toContain('11988887777');
+      expect(serialized).not.toContain('01310-100');
+
+      const payload = order.rawPayload as {
+        entrega?: { transportadora?: unknown; prazoDias?: unknown; enderecoEntrega?: unknown };
+      };
+      // A chave "enderecoEntrega" ela mesma bate com o fragmento "endereco" —
+      // o valor inteiro (nome, logradouro, bairro, cep, telefone juntos, o
+      // que por si só já identifica onde o cliente mora) é substituído,
+      // não recursivamente vasculhado por campo.
+      expect(payload.entrega?.enderecoEntrega).toBe('[REDACTED]');
+      // Mas os irmãos de enderecoEntrega, que não são PII, sobrevivem —
+      // é um redator por nome de chave, não uma allowlist do objeto inteiro.
+      expect(payload.entrega?.transportadora).toBe('Correios');
+      expect(payload.entrega?.prazoDias).toBe(5);
+    });
+
+    it('preserves a genuinely non-PII field at any nesting depth', () => {
+      const { order } = map({
+        entrega: {
+          transportadora: 'Correios',
+          prazoDias: 5,
+          rastreamento: { codigoRastreio: 'BR123456789', status: 'em trânsito' },
+        },
+      });
+      const payload = order.rawPayload as {
+        entrega?: { transportadora?: unknown; prazoDias?: unknown; rastreamento?: { codigoRastreio?: unknown; status?: unknown } };
+      };
+      // Nada aqui bate com um fragmento de nome de chave PII, em nenhuma
+      // profundidade — tudo sobrevive intacto para reprocessamento.
+      expect(payload.entrega?.transportadora).toBe('Correios');
+      expect(payload.entrega?.prazoDias).toBe(5);
+      expect(payload.entrega?.rastreamento?.codigoRastreio).toBe('BR123456789');
+      expect(payload.entrega?.rastreamento?.status).toBe('em trânsito');
+    });
+
+    it('matches PII key names regardless of casing, accents and separators', () => {
+      const { order } = map({
+        informacoesAdicionais: {
+          centerVisitorId: '1234567890.1699999999',
+          utmCampaign: 'black-friday',
+          TELEFONE_CELULAR: '11977776666',
+          'E-Mail-Secundário': 'outro@example.com',
+        },
+      });
+      const serialized = JSON.stringify(order.rawPayload);
+      expect(serialized).not.toContain('11977776666');
+      expect(serialized).not.toContain('outro@example.com');
+    });
+
+    it('still hashes the real (pre-redaction) cliente values, not the redacted placeholder', () => {
+      // A ordem importa: o redator roda sobre uma CÓPIA, depois que o hashing
+      // já leu os valores reais — nunca o inverso, senão emailHash/
+      // documentHash virariam hash de "[REDACTED]" em vez do dado real.
+      const pseudonymizer2 = new Pseudonymizer('p'.repeat(32));
+      const expectedEmailHash = pseudonymizer2.hashEmail('ana@example.com');
+      const expectedDocumentHash = pseudonymizer2.hashDocument('12345678909');
+
+      const { order } = map();
+      expect(order.customer?.emailHash).toBe(expectedEmailHash);
+      expect(order.customer?.documentHash).toBe(expectedDocumentHash);
+      // E, por garantia, os hashes não podem ser derivados do placeholder.
+      expect(order.customer?.emailHash).not.toBe(pseudonymizer2.hashEmail('[REDACTED]'));
+    });
+  });
 });

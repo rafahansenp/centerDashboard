@@ -158,9 +158,22 @@ describe('commerce.items_sold', () => {
 });
 
 describe('commerce.new_customers', () => {
-  it('counts customers whose first order falls in the window', async () => {
-    // C1, C2, C3, C4 tiveram o primeiro pedido em janeiro. C5 em fevereiro.
-    expect((await provider.query(query({ metricId: 'commerce.new_customers' }))).total).toBe(4);
+  it('counts customers whose first order has a sales status and falls in the window', async () => {
+    // C1 (P1, PAID) e C2 (P2, DELIVERED) contam. C3 (P3, CANCELLED) e C4
+    // (P4, PENDING_PAYMENT) NÃO contam: o único pedido de cada um não tem
+    // status de venda (achado B2). C5 é fevereiro, fora da janela.
+    expect((await provider.query(query({ metricId: 'commerce.new_customers' }))).total).toBe(2);
+  });
+
+  it('does not count a customer whose only order was cancelled (B2)', async () => {
+    // Reproduz o cenário concreto do achado: um lote de pedidos recusados
+    // não pode aparecer como aquisição de clientes novos.
+    await seedOrders([{
+      numeroPedido: 'FRAUD1', emittedAtLocal: '2026-01-12T10:00:00', statusGroup: 'CANCELLED',
+      totalCents: 50000, customerExternalId: 'FRAUD1',
+    }]);
+    // Sob o bug antigo o total subiria para 3; corrigido, permanece 2.
+    expect((await provider.query(query({ metricId: 'commerce.new_customers' }))).total).toBe(2);
   });
 
   it('does not count a returning customer twice', async () => {
@@ -172,8 +185,8 @@ describe('commerce.new_customers', () => {
   it('also aggregates at week and month granularity', async () => {
     const week = await provider.query(query({ metricId: 'commerce.new_customers', granularity: 'week' }));
     const month = await provider.query(query({ metricId: 'commerce.new_customers', granularity: 'month' }));
-    expect(week.total).toBe(4);
-    expect(month.total).toBe(4);
+    expect(week.total).toBe(2);
+    expect(month.total).toBe(2);
   });
 });
 

@@ -84,6 +84,17 @@ describe('channel_average_ticket', () => {
     const result = await tool.handler(period) as { rows: Array<{ key: string }> };
     expect(result.rows[0]?.key).toBe('site');
   });
+
+  it('reports total as the overall average ticket, not the sum of per-channel averages, and omits share (B1)', async () => {
+    const result = await tool.handler(period) as {
+      total: number; rows: Array<{ key: string; value: number; share?: number }>;
+    };
+    // Somar 18333 (site) + 12500 (app) daria ~30833, sem significado.
+    // O correto é receita total / pedidos totais do período inteiro:
+    // (30000+10000+15000+20000+5000) / 5 = 16000.
+    expect(result.total).toBe(16000);
+    expect(result.rows.every((r) => r.share === undefined)).toBe(true);
+  });
 });
 
 describe('device_revenue', () => {
@@ -134,6 +145,43 @@ describe('campaign_conversion', () => {
   });
 });
 
+describe('campaign_conversion — touched respeita as duas pontas do período (B3)', () => {
+  const tool = createCampaignConversionTool(prisma);
+  const b3Period = { from: '2026-05-01', to: '2026-05-31', tenant };
+
+  beforeAll(async () => {
+    // v-antigo tocou a campanha ANTES do período (abril) e nunca comprou.
+    // Sob o bug B3 (touched sem limite inferior), esse toque de abril ainda
+    // seria contado como "visitante" da consulta de maio.
+    await prisma.attributionTouch.create({
+      data: {
+        organizationId: TEST_ORG, visitorHash: 'v-antigo', campaign: 'campanha-de-maio',
+        source: 'google', medium: 'cpc', device: 'mobile',
+        occurredAt: new Date('2026-04-15T10:00:00Z'),
+      },
+    });
+    // v-maio tocou e comprou dentro de maio — deve contar normalmente.
+    await prisma.attributionTouch.create({
+      data: {
+        organizationId: TEST_ORG, visitorHash: 'v-maio', campaign: 'campanha-de-maio',
+        source: 'google', medium: 'cpc', device: 'mobile',
+        occurredAt: new Date('2026-05-05T10:00:00Z'),
+      },
+    });
+    await seedOrders([
+      { numeroPedido: 'B3-1', emittedAtLocal: '2026-05-10T10:00:00', statusGroup: 'PAID', totalCents: 5000,
+        visitorHash: 'v-maio' },
+    ]);
+  });
+
+  it('does not count a touch from before the period as a visitor', async () => {
+    const result = await tool.handler({ ...b3Period, campaign: 'campanha-de-maio' }) as { visitors: number; buyers: number };
+    // Só v-maio deveria contar; v-antigo tocou em abril, fora da janela.
+    expect(result.visitors).toBe(1);
+    expect(result.buyers).toBe(1);
+  });
+});
+
 describe('campaign_returning_customers', () => {
   const tool = createReturningCustomersTool(prisma);
 
@@ -168,15 +216,49 @@ describe('campaign_returning_customers — pedidos sem cliente vinculado', () =>
     ]);
   });
 
-  it('reports zero customers, zero rate and zero share for a group made only of guest checkouts', async () => {
+  it('reports zero customers and zero rate, and no share, for a group made only of guest checkouts', async () => {
     const result = await tool.handler(guestPeriod) as {
-      total: number; rows: Array<{ key: string; value: number; share: number; extra: Record<string, number> }>;
+      total: number; rows: Array<{ key: string; value: number; share?: number; extra: Record<string, number> }>;
     };
     const row = result.rows.find((r) => r.key === 'sem-cliente');
     expect(row?.extra.customers).toBe(0);
     expect(row?.value).toBe(0);
-    // Único grupo do período, com taxa 0 — o total agregado também é 0.
-    expect(row?.share).toBe(0);
+    // Rate não é aditiva entre campanhas: share nunca é reportado por linha.
+    expect(row?.share).toBeUndefined();
+    // Único grupo do período, com taxa 0 — o total agregado (correto, não somado) também é 0.
     expect(result.total).toBe(0);
+  });
+});
+
+describe('campaign_returning_customers — total é a taxa geral, não a soma das linhas (B1)', () => {
+  const tool = createReturningCustomersTool(prisma);
+  const b1Period = { from: '2026-04-01', to: '2026-04-30', tenant };
+
+  beforeAll(async () => {
+    // campanha-a: 2 clientes, 1 recorrente → taxa 0,5
+    await seedOrders([
+      { numeroPedido: 'B1-1', emittedAtLocal: '2026-04-05T10:00:00', statusGroup: 'PAID', totalCents: 1000,
+        campaign: 'campanha-a', customerExternalId: 'CA1' },
+      { numeroPedido: 'B1-2', emittedAtLocal: '2026-04-06T10:00:00', statusGroup: 'PAID', totalCents: 1000,
+        campaign: 'campanha-a', customerExternalId: 'CA1' },
+      { numeroPedido: 'B1-3', emittedAtLocal: '2026-04-07T10:00:00', statusGroup: 'PAID', totalCents: 1000,
+        campaign: 'campanha-a', customerExternalId: 'CA2' },
+      // campanha-b: 2 clientes, nenhum recorrente → taxa 0
+      { numeroPedido: 'B1-4', emittedAtLocal: '2026-04-08T10:00:00', statusGroup: 'PAID', totalCents: 1000,
+        campaign: 'campanha-b', customerExternalId: 'CB1' },
+      { numeroPedido: 'B1-5', emittedAtLocal: '2026-04-09T10:00:00', statusGroup: 'PAID', totalCents: 1000,
+        campaign: 'campanha-b', customerExternalId: 'CB2' },
+    ]);
+  });
+
+  it('computes total as the overall recurrence rate, not the sum of each row', async () => {
+    const result = await tool.handler(b1Period) as {
+      total: number; rows: Array<{ key: string; value: number; share?: number }>;
+    };
+    // Somar as taxas daria 0,5 + 0 = 0,5. A taxa geral correta é
+    // 1 cliente recorrente / 4 clientes totais = 0,25.
+    expect(result.total).toBeCloseTo(0.25, 5);
+    // share nunca é reportado por linha — taxa não é aditiva entre campanhas.
+    expect(result.rows.every((r) => r.share === undefined)).toBe(true);
   });
 });

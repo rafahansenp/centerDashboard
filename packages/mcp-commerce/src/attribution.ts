@@ -20,6 +20,24 @@ const RankingOutputShape = {
   })),
 };
 
+/**
+ * Para rankings cujo valor por linha NÃO é aditivo (ticket médio, taxa de
+ * recorrência…), somar as linhas e dividir cada uma pela soma produz um
+ * `total`/`share` sem significado — ver achado B1 da revisão final de
+ * branch. `total` aqui é sempre um agregado correto do período inteiro
+ * (não a soma das linhas), calculado a partir dos mesmos contadores já
+ * buscados; `share` é omitido porque "participação no total" não existe
+ * para uma média ou uma taxa.
+ */
+const NonAdditiveRankingOutputShape = {
+  dimension: z.string(), from: z.string(), to: z.string(),
+  total: z.number(), unit: z.string(),
+  rows: z.array(z.object({
+    key: z.string(), label: z.string(), value: z.number(),
+    unit: z.string(), extra: z.record(z.string(), z.number()), share: z.number().optional(),
+  })),
+};
+
 interface DimensionRow {
   key: string | null;
   revenue: bigint | null;
@@ -68,7 +86,29 @@ interface RankingRowShape {
   value: number;
   unit: string;
   extra: Record<string, number>;
-  share: number;
+  share?: number;
+}
+
+type MappedDimensionRow = {
+  key: string; revenue: number; orders: number; customers: number; returning: number;
+  averageTicketCents: number;
+};
+
+interface BuildRowsOptions {
+  /**
+   * Falso quando o valor da linha não é aditivo entre grupos (ex.: ticket
+   * médio, taxa de recorrência) — nesse caso `share` nunca é emitido e
+   * `total` vem de `computeTotal`, nunca de somar as linhas.
+   */
+  additive: boolean;
+  /**
+   * Só usado quando `additive` é falso. Deriva um `total` correto a partir
+   * dos contadores já buscados nesta mesma consulta (ex.: receita e pedidos
+   * somados de todos os grupos, não só do top N). Nunca adivinha: se um
+   * total correto não puder ser calculado sem uma consulta extra, o chamador
+   * simplesmente não passa esta função e `total` fica de fora da resposta.
+   */
+  computeTotal?: (mapped: MappedDimensionRow[]) => number;
 }
 
 function buildRows(
@@ -76,8 +116,9 @@ function buildRows(
   pick: (row: { revenue: number; orders: number; customers: number; returning: number }) => number,
   unit: string,
   limit: number,
-): { total: number; rows: RankingRowShape[] } {
-  const mapped = rows.map((row) => {
+  options: BuildRowsOptions,
+): { total?: number; rows: RankingRowShape[] } {
+  const mapped: MappedDimensionRow[] = rows.map((row) => {
     const revenue = Number(row.revenue ?? 0);
     const orders = Number(row.orders);
     const customers = Number(row.customers);
@@ -89,7 +130,9 @@ function buildRows(
     };
   });
 
-  const total = mapped.reduce((acc, row) => acc + pick(row), 0);
+  const total = options.additive
+    ? mapped.reduce((acc, row) => acc + pick(row), 0)
+    : options.computeTotal?.(mapped);
 
   const ranked = [...mapped]
     .sort((a, b) => pick(b) - pick(a))
@@ -106,10 +149,10 @@ function buildRows(
         returningCustomers: row.returning,
         averageTicketCents: row.averageTicketCents,
       },
-      share: total === 0 ? 0 : pick(row) / total,
+      ...(options.additive ? { share: total === 0 ? 0 : pick(row) / (total as number) } : {}),
     }));
 
-  return { total, rows: ranked };
+  return { ...(total !== undefined ? { total } : {}), rows: ranked };
 }
 
 export function createCampaignRevenueTool(prisma: PrismaClient): AnalysisTool {
@@ -126,7 +169,7 @@ export function createCampaignRevenueTool(prisma: PrismaClient): AnalysisTool {
       const rows = await aggregateByColumn(
         prisma, tenant.organizationId, start, end, 'attributionCampaign', NO_CAMPAIGN,
       );
-      const built = buildRows(rows, (row) => row.revenue, 'currency', limit);
+      const built = buildRows(rows, (row) => row.revenue, 'currency', limit, { additive: true });
       return { dimension: 'campaign', from, to, unit: 'currency', ...built };
     },
   };
@@ -137,9 +180,13 @@ export function createChannelTicketTool(prisma: PrismaClient): AnalysisTool {
     name: 'channel_average_ticket',
     description:
       'Ticket médio por canal de venda (site, app, marketplace…) no período. ' +
-      'Use para "quais canais possuem maior ticket médio".',
+      'Use para "quais canais possuem maior ticket médio". `total` é o ticket ' +
+      'médio geral do período inteiro (receita total / pedidos totais), não a ' +
+      'soma dos tickets médios de cada canal. `share` não é reportado por linha: ' +
+      'ticket médio não é aditivo entre canais, então "participação no total" ' +
+      'não tem significado aqui.',
     inputSchema: { ...PeriodShape, limit: z.number().optional() },
-    outputSchema: RankingOutputShape,
+    outputSchema: NonAdditiveRankingOutputShape,
     handler: async (args) => {
       const { from, to, tenant, limit } = PeriodSchema.parse(args);
       const { start, end } = rangeToUtc(from, to);
@@ -147,7 +194,17 @@ export function createChannelTicketTool(prisma: PrismaClient): AnalysisTool {
         prisma, tenant.organizationId, start, end, 'canal', 'sem-canal',
       );
       // Ordenado por ticket médio, não por receita — é o que a pergunta pede.
-      const built = buildRows(rows, (row) => (row.orders === 0 ? 0 : Math.round(row.revenue / row.orders)), 'currency', limit);
+      const built = buildRows(rows, (row) => (row.orders === 0 ? 0 : Math.round(row.revenue / row.orders)), 'currency', limit, {
+        additive: false,
+        // Ticket médio geral do período: receita total / pedidos totais de
+        // TODOS os canais (não só do top N exibido) — dados já buscados
+        // nesta mesma consulta, nenhuma chamada extra.
+        computeTotal: (mapped) => {
+          const revenue = mapped.reduce((acc, row) => acc + row.revenue, 0);
+          const orders = mapped.reduce((acc, row) => acc + row.orders, 0);
+          return orders === 0 ? 0 : Math.round(revenue / orders);
+        },
+      });
       return { dimension: 'channel', from, to, unit: 'currency', ...built };
     },
   };
@@ -167,7 +224,7 @@ export function createDeviceRevenueTool(prisma: PrismaClient): AnalysisTool {
       const rows = await aggregateByColumn(
         prisma, tenant.organizationId, start, end, 'attributionDevice', 'desconhecido',
       );
-      const built = buildRows(rows, (row) => row.revenue, 'currency', limit);
+      const built = buildRows(rows, (row) => row.revenue, 'currency', limit, { additive: true });
       return { dimension: 'device', from, to, unit: 'currency', ...built };
     },
   };
@@ -203,7 +260,7 @@ export function createCampaignConversionTool(prisma: PrismaClient): AnalysisTool
           FROM "AttributionTouch" t
           WHERE t."organizationId" = ${tenant.organizationId}
             AND t."campaign" = ${normalized}
-            AND t."occurredAt" < ${end}
+            AND t."occurredAt" >= ${start} AND t."occurredAt" < ${end}
         ),
         purchases AS (
           SELECT o."visitorHash", SUM(o."totalCents") AS revenue, COUNT(*) AS orders
@@ -241,9 +298,13 @@ export function createReturningCustomersTool(prisma: PrismaClient): AnalysisTool
     name: 'campaign_returning_customers',
     description:
       'Proporção de clientes que compraram mais de uma vez, por campanha. Use para ' +
-      '"quais campanhas geraram usuários recorrentes". O valor é a taxa de recorrência (0 a 1).',
+      '"quais campanhas geraram usuários recorrentes". O valor de cada linha é a taxa ' +
+      'de recorrência da campanha (0 a 1). `total` é a taxa de recorrência geral do ' +
+      'período (clientes recorrentes / clientes totais, de todas as campanhas), não a ' +
+      'soma das taxas de cada linha. `share` não é reportado por linha: taxa não é ' +
+      'aditiva entre campanhas.',
     inputSchema: { ...PeriodShape, limit: z.number().optional() },
-    outputSchema: RankingOutputShape,
+    outputSchema: NonAdditiveRankingOutputShape,
     handler: async (args) => {
       const { from, to, tenant, limit } = PeriodSchema.parse(args);
       const { start, end } = rangeToUtc(from, to);
@@ -255,6 +316,16 @@ export function createReturningCustomersTool(prisma: PrismaClient): AnalysisTool
         (row) => (row.customers === 0 ? 0 : row.returning / row.customers),
         'ratio',
         limit,
+        {
+          additive: false,
+          // Taxa de recorrência geral do período: clientes recorrentes / clientes
+          // totais somados de TODAS as campanhas (não só do top N exibido).
+          computeTotal: (mapped) => {
+            const customers = mapped.reduce((acc, row) => acc + row.customers, 0);
+            const returning = mapped.reduce((acc, row) => acc + row.returning, 0);
+            return customers === 0 ? 0 : returning / customers;
+          },
+        },
       );
       return { dimension: 'campaign', from, to, unit: 'ratio', ...built };
     },

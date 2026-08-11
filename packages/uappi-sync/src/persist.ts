@@ -46,6 +46,21 @@ export async function persistOrder(
         },
       });
       customerId = customer.id;
+
+      // `firstOrderAt` precisa ser monotonicamente o pedido mais antigo já
+      // visto. `iterateOrders` pagina por offset sem ordem garantida, então um
+      // pedido de 2022 pode chegar DEPOIS de um de 2026 no mesmo backfill — o
+      // `create` acima só cobre a primeira vez que o cliente aparece; sem
+      // isto, um sync reentrante nunca corrigiria `firstOrderAt` para um
+      // pedido mais antigo encontrado depois. `LEAST` dentro do próprio
+      // UPDATE (não um read-then-write em JS) evita a corrida de dois syncs
+      // concorrentes lendo o mesmo valor antigo e escrevendo o mesmo "mínimo"
+      // desatualizado.
+      await tx.$executeRaw`
+        UPDATE "CommerceCustomer"
+        SET "firstOrderAt" = LEAST("firstOrderAt", ${order.emittedAt})
+        WHERE "id" = ${customer.id}
+      `;
     }
 
     const orderData = {

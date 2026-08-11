@@ -113,28 +113,76 @@ function mapCustomer(order: UappiOrder, pseudonymizer: Pseudonymizer): MappedCus
 }
 
 const PII_REDACTED = '[REDACTED]';
-const CUSTOMER_PII_KEYS = ['email', 'documento', 'nomeRazao'] as const;
 
 /**
- * `rawPayload` guarda o pedido inteiro para reprocessamento offline, mas
- * `order.cliente` (schema `.passthrough()`) carrega e-mail, documento e
- * razão social em claro — dado pessoal que não pode ir para o banco. Devolve
- * uma cópia do pedido com só esses três campos redigidos; tudo o mais
- * (itens, valores, status, pagamento, informacoesAdicionais e os demais
- * campos de `cliente`, como `idCliente`) permanece intacto para reprocessamento.
- * Não muta `order`: quem já leu `order.cliente.email`/`documento` para hash
- * continua vendo os valores reais.
+ * Fragmentos de nome de chave (já normalizados: minúsculos, sem acento, sem
+ * separador) que indicam dado pessoal. Correspondência por "contém", não
+ * igualdade exata — a Uappi varia o nome do campo por loja/endpoint, então
+ * `email`, `emailCliente`, `clienteEmail` precisam todos cair aqui.
+ *
+ * Substitui o denylist fixo de 3 campos da T8 (achado B4 da revisão final de
+ * branch): aquele denylist só cobria `cliente.email/documento/nomeRazao`, mas
+ * payloads reais de detalhe de pedido da Uappi trazem `entrega`/
+ * `enderecoEntrega` com nome, telefone e endereço completos NO NÍVEL RAIZ do
+ * pedido, fora de `cliente` inteiramente — e `CustomerSchema`/
+ * `UappiOrderSchema` são `.passthrough()`, então nenhum desses campos é
+ * barrado pelo schema.
  */
-function redactRawPayload(order: UappiOrder): unknown {
-  const customer = order.cliente as Record<string, unknown> | undefined;
-  if (!customer) return order;
+const PII_KEY_FRAGMENTS = [
+  'email',
+  'documento', 'cpf', 'cnpj',
+  'nome', 'razaosocial',
+  'telefone', 'celular', 'fone',
+  'endereco', 'logradouro', 'complemento', 'bairro', 'cep',
+] as const;
 
-  const redactedCustomer: Record<string, unknown> = { ...customer };
-  for (const key of CUSTOMER_PII_KEYS) {
-    if (key in redactedCustomer) redactedCustomer[key] = PII_REDACTED;
+/** Minúsculo, sem acento, sem separador — casa `Nome`, `nome_razao`, `telefoneCelular`, `RAZAO-SOCIAL`… */
+function normalizeKeyForPiiMatch(key: string): string {
+  return key
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function isPiiKey(key: string): boolean {
+  const normalized = normalizeKeyForPiiMatch(key);
+  return PII_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
+}
+
+/**
+ * Percorre recursivamente objeto/array/primitivo e substitui por
+ * `PII_REDACTED` o valor inteiro de qualquer chave cujo nome bata com
+ * `isPiiKey`, em qualquer profundidade e sob qualquer chave-pai — é um
+ * redator por nome de chave, não uma allowlist: tudo que não é PII
+ * (itens, valores, status, pagamento, `idCliente`, `informacoesAdicionais`,
+ * campos ainda desconhecidos de lojas futuras…) sobrevive intacto para
+ * reprocessamento. Nunca muta a entrada: sempre devolve uma estrutura nova,
+ * então quem já leu `order.cliente.email`/`documento` para gerar o hash
+ * continua vendo os valores reais — a chamada a este redator só acontece
+ * depois, sobre uma cópia.
+ */
+function redactPiiDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => redactPiiDeep(item));
+
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      result[key] = isPiiKey(key) ? PII_REDACTED : redactPiiDeep(nested);
+    }
+    return result;
   }
 
-  return { ...order, cliente: redactedCustomer };
+  return value;
+}
+
+/**
+ * `rawPayload` guarda o pedido inteiro para reprocessamento offline. Devolve
+ * uma cópia redigida recursivamente (ver `redactPiiDeep`) — não mais um
+ * denylist de 3 campos fixos dentro de `cliente`.
+ */
+function redactRawPayload(order: UappiOrder): unknown {
+  return redactPiiDeep(order);
 }
 
 function mapAttribution(order: UappiOrder, pseudonymizer: Pseudonymizer): MappedAttribution {

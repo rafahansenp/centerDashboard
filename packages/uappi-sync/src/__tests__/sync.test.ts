@@ -29,17 +29,23 @@ function buildDeps(pages: unknown[][], detailOverrides: Record<string, unknown> 
   const createItems = jest.fn(async () => ({ count: 1 }));
   const upsertSyncState = jest.fn(async () => ({}));
   const findSyncState = jest.fn(async () => null);
+  // persistOrder emite um LEAST(...) via $executeRaw para manter firstOrderAt
+  // monotônico (B2) sempre que o pedido tem cliente — o mock da transação
+  // precisa oferecer o método, senão toda chamada com cliente quebraria.
+  const executeRaw = jest.fn(async () => 1);
 
   const prisma = {
     commerceOrder: { upsert: upsertOrder },
     commerceCustomer: { upsert: upsertCustomer },
     commerceOrderItem: { deleteMany: deleteItems, createMany: createItems },
     syncState: { findUnique: findSyncState, upsert: upsertSyncState },
+    $executeRaw: executeRaw,
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         commerceOrder: { upsert: upsertOrder },
         commerceCustomer: { upsert: upsertCustomer },
         commerceOrderItem: { deleteMany: deleteItems, createMany: createItems },
+        $executeRaw: executeRaw,
       })),
   } as unknown as PrismaClient;
 
@@ -52,7 +58,7 @@ function buildDeps(pages: unknown[][], detailOverrides: Record<string, unknown> 
       now: () => new Date('2026-07-20T12:00:00Z'),
     },
     iterateOrders, getOrder, upsertOrder, upsertCustomer, createItems,
-    findSyncState, upsertSyncState,
+    findSyncState, upsertSyncState, executeRaw,
   };
 }
 

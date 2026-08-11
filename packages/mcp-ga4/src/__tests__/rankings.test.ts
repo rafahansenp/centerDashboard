@@ -104,6 +104,23 @@ describe('device_performance', () => {
     expect(result.rows[0]).toMatchObject({ value: 0 });
     expect(result.rows[0]?.extra).toMatchObject({ users: 0, conversions: 0 });
   });
+
+  it('reports total as the overall conversion rate, not the sum of per-device rates, and omits share (B1)', async () => {
+    // Cenário exato do achado B1: mobile 10000/500 (5%), desktop 2000/200 (10%),
+    // tablet 500/25 (5%). Somar as taxas daria 20% (desktop apareceria com
+    // "50% de participação"). O total correto é 725 conversões / 12500
+    // sessões = 5,8%.
+    const { client } = fakeClient([[
+      { dimensions: { deviceCategory: 'mobile' }, metrics: { sessions: 10000, activeUsers: 9000, conversions: 500 } },
+      { dimensions: { deviceCategory: 'desktop' }, metrics: { sessions: 2000, activeUsers: 1800, conversions: 200 } },
+      { dimensions: { deviceCategory: 'tablet' }, metrics: { sessions: 500, activeUsers: 400, conversions: 25 } },
+    ]]);
+    const result = await createDevicePerformanceTool(client).handler(period) as {
+      total?: number; rows: Array<{ key: string; share?: number }>;
+    };
+    expect(result.total).toBeCloseTo(725 / 12500, 5);
+    expect(result.rows.every((r) => r.share === undefined)).toBe(true);
+  });
 });
 
 describe('page_performance', () => {
@@ -122,6 +139,22 @@ describe('page_performance', () => {
     const result = await createPagePerformanceTool(client).handler(period) as { rows: Array<Record<string, unknown>> };
     expect(result.rows[0]).toMatchObject({ key: '/novo', value: 0 });
     expect(result.rows[0]?.extra).toEqual({ pageViews: 0 });
+  });
+
+  it('omits total and share entirely rather than summing bounce rates (B1)', async () => {
+    // Somar 0,8 + 0,2 "daria" 100% de taxa de rejeição total — a taxa de
+    // rejeição não é aditiva entre páginas, e esta consulta nem busca
+    // sessões por página para calcular um total correto. Omitir é a regra.
+    const { client } = fakeClient([[
+      { dimensions: { pagePath: '/checkout' }, metrics: { screenPageViews: 500, bounceRate: 0.8 } },
+      { dimensions: { pagePath: '/home' }, metrics: { screenPageViews: 2000, bounceRate: 0.2 } },
+    ]]);
+    const result = await createPagePerformanceTool(client).handler(period) as {
+      total?: number; rows: Array<{ share?: number }>;
+    };
+    expect(result.total).toBeUndefined();
+    expect(result.rows.every((r) => r.share === undefined)).toBe(true);
+    expect('total' in result).toBe(false);
   });
 });
 
