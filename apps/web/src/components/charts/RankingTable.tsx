@@ -19,6 +19,11 @@ const percent = new Intl.NumberFormat('pt-BR', {
  * veio buscar — o nome. A participação percentual dá a proporção sem a barra.
  */
 export function RankingTable({ title, description, result, isLoading = false, error = null }: RankingTableProps) {
+  // A coluna some por completo quando o ranking não tem participação para
+  // mostrar — melhor do que uma coluna inteira de trações, e muito melhor do
+  // que o "NaN%" que sairia ao formatar um `share` ausente.
+  const hasShare = result?.rows.some((row) => row.share !== undefined) ?? false;
+
   return (
     <section
       className="rounded-lg border p-4"
@@ -45,7 +50,7 @@ export function RankingTable({ title, description, result, isLoading = false, er
           <table className="w-full text-sm">
             <thead>
               <tr>
-                {['#', 'Item', 'Valor', 'Part.'].map((column) => (
+                {['#', 'Item', 'Valor', ...(hasShare ? ['Part.'] : [])].map((column) => (
                   <th
                     key={column} scope="col"
                     className="border-b px-2 py-1.5 text-left font-medium"
@@ -68,9 +73,11 @@ export function RankingTable({ title, description, result, isLoading = false, er
                   <td className="border-b px-2 py-1.5 tabular-nums" style={{ borderColor: 'var(--gridline)', color: 'var(--text-primary)' }}>
                     {formatMetricValue(row.value, row.unit)}
                   </td>
-                  <td className="border-b px-2 py-1.5 tabular-nums" style={{ borderColor: 'var(--gridline)', color: 'var(--text-secondary)' }}>
-                    {percent.format(row.share)}
-                  </td>
+                  {hasShare ? (
+                    <td className="border-b px-2 py-1.5 tabular-nums" style={{ borderColor: 'var(--gridline)', color: 'var(--text-secondary)' }}>
+                      {row.share === undefined ? '—' : percent.format(row.share)}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

@@ -24,12 +24,28 @@ export interface MetricQueryInput {
 
 export interface RankingRow {
   key: string; label: string; value: number; unit: MetricUnit;
-  extra: Record<string, number>; share: number;
+  extra: Record<string, number>;
+  /**
+   * Ausente quando a participação não faz sentido para aquele ranking. Uma
+   * média ou uma taxa não é aditiva: somar as linhas não dá um todo, então
+   * `valor / soma` não é uma proporção de coisa nenhuma. Os rankings desse
+   * tipo (ticket médio por canal, taxa de recompra, conversão por dispositivo,
+   * rejeição por página) omitem o campo em vez de devolver um número
+   * inventado.
+   */
+  share?: number;
 }
 
 export interface RankingResult {
   dimension: string; from: string; to: string;
-  total: number; unit: MetricUnit; rows: RankingRow[];
+  /**
+   * Ausente quando não existe um total inequívoco — ou porque somar as linhas
+   * não significa nada (rankings de taxa/média, ver `RankingRow.share`), ou
+   * porque a ferramenta não expõe um conceito de total. Omitir é deliberado:
+   * um número errado aqui é pior do que nenhum.
+   */
+  total?: number;
+  unit: MetricUnit; rows: RankingRow[];
 }
 
 export interface FunnelResult {

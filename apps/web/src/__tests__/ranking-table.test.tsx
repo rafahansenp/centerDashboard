@@ -24,6 +24,27 @@ describe('RankingTable', () => {
     expect(screen.getByText('60,0%')).toBeInTheDocument();
   });
 
+  it('drops the share column entirely for a non-additive ranking', () => {
+    // Ticket médio, taxa de recompra, conversão por dispositivo e rejeição por
+    // página não são aditivos: a soma das linhas não é um todo, então o
+    // servidor deixou de mandar `share`. Sem esta guarda, `percent.format` de
+    // um valor ausente renderiza literalmente "NaN%" na tabela.
+    const nonAdditive: RankingResult = {
+      dimension: 'device', from: '2026-01-01', to: '2026-01-31',
+      unit: 'ratio',
+      rows: [
+        { key: 'desktop', label: 'Desktop', value: 0.1, unit: 'ratio', extra: {} },
+        { key: 'mobile', label: 'Mobile', value: 0.05, unit: 'ratio', extra: {} },
+      ],
+    };
+
+    renderWithProviders(<RankingTable title="Conversão por dispositivo" result={nonAdditive} />);
+
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Part.' })).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Desktop' })).toBeInTheDocument();
+  });
+
   it('numbers the positions so the ranking is explicit', () => {
     renderWithProviders(<RankingTable title="Produtos" result={result} />);
     expect(screen.getByRole('cell', { name: '1' })).toBeInTheDocument();
