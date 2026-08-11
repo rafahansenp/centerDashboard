@@ -193,8 +193,8 @@ recusado: já existem 1 usuário(s) no banco — este script só provisiona
 a primeira instalação (banco vazio). Nada foi alterado.
 ```
 
-> ⚠️ **Os scripts `pnpm provision:admin`, `health:report`, `warm:cache` e
-> `eval:agent` estão quebrados no Node 22.** Todos usam
+> ⚠️ **Os scripts `pnpm provision:admin`, `health:report`, `warm:cache`,
+> `eval:agent` e `seed:demo` estão quebrados no Node 22.** Todos usam
 > `--experimental-strip-types`, que remove tipos mas **não** remapeia imports
 > `./x.js` para o `.ts` irmão — então morrem com `ERR_MODULE_NOT_FOUND` antes de
 > executar qualquer coisa. É a mesma dívida técnica dos scripts `dev`.
@@ -206,6 +206,7 @@ a primeira instalação (banco vazio). Nada foi alterado.
 > | `pnpm health:report` | `node dist/scripts/health-report.js` |
 > | `pnpm warm:cache` | `node dist/scripts/warm-cache.js` |
 > | `pnpm eval:agent` | `node dist/scripts/eval-agent.js` |
+> | `pnpm seed:demo` | `node dist/scripts/seed-demo.js` (Passo 8) |
 >
 > O `pnpm db:seed` é a exceção e funciona normalmente: ele importa de `dist/`,
 > não de um `.ts` irmão.
@@ -272,6 +273,59 @@ Você vai ver dois estados diferentes, e eles significam coisas diferentes:
 | `fonte de dados indisponível` (vermelho) | A consulta **falhou**. Para os cards de GA4, quase sempre é `ga4PropertyId` não configurado |
 | `Sem dados no período selecionado` | A consulta **funcionou** e voltou vazia — falta dado no banco, ou o período não cobre os dados |
 
+#### Caminho rápido: um comando
+
+Ainda em `apps/api`, com o `.env` carregado (Passo 3) e **depois** de `pnpm -w
+build` (Passo 4):
+
+```bash
+node dist/scripts/seed-demo.js
+```
+
+> Por que o compilado e não `pnpm seed:demo` diretamente: mesma dívida de
+> `--experimental-strip-types` já descrita na nota do Passo 5 — o script
+> importa de arquivos `.ts` irmãos, que só existem resolvidos em `dist/`.
+
+Isso faz, na organização já existente (criada pelo seed ou pelo
+provisionamento):
+
+1. **Configura GA4 e Uappi** exatamente pelas colunas que a página de
+   Configurações grava — `ga4PropertyId`, `ga4BigQueryDataset`,
+   `uappiApiKey`/`uappiSecretKey` (cifradas com o mesmo `SecretBox` da
+   Settings). Nunca sobrescreve um valor já configurado — se a organização já
+   tiver credenciais reais, o script avisa e as deixa intactas.
+2. **Roda o sync de verdade** contra o `MockUappiClient` (mesmo caminho de
+   código do sync de produção: schema Zod → `mapOrder` → `persistOrder`),
+   populando `CommerceOrder`/`CommerceOrderItem`/`CommerceCustomer`.
+3. **Deriva os toques de atribuição** (`AttributionTouch`) dos pedidos que já
+   têm `visitorHash`, reaproveitando o hash que o sync real já calculou —
+   nunca escreve um identificador bruto.
+
+É seguro rodar mais de uma vez: nada é duplicado (o sync já é idempotente por
+`numeroPedido`, e o script confere antes de gravar cada resto). Ele se recusa
+a rodar se `MOCK_EXTERNAL_APIS` não for `"true"`, para nunca gravar
+credenciais de demonstração por cima de uma integração real.
+
+Ao final ele imprime um resumo com as contagens, o faturamento total e —
+importante — **o período real coberto pelos dados**, calculado a partir do
+banco, não fixo no texto:
+
+```
+estado do banco após o seed:
+  pedidos: 15
+  itens de pedido: 20
+  clientes: 14
+  toques de atribuição: 3 (3 criados nesta rodada)
+  faturamento total (todos os status): R$ 3.947,10
+
+período coberto pelos pedidos: 2026-07-01 a 2026-07-20
+no painel, escolha um período que inclua essas datas (ex.: "Mês passado", "90 dias" ou um
+intervalo customizado). Se "hoje" estiver fora dessa janela, os presets "Hoje"/"7 dias"/
+"30 dias" aparecerão corretamente vazios — não é um bug.
+```
+
+#### Caminho manual (para entender o que o comando acima faz)
+
 **1. Configure a organização.** Pelo painel, em **Configurações**, preencha:
 
 - **ID da propriedade GA4** — em modo mock, qualquer valor serve (ex.: `000000000`).
@@ -302,10 +356,13 @@ docker compose exec postgres psql -U center -d center \
 **3. Escolha o período certo.** ⚠️ As fixtures da Uappi são de **julho de 2026**.
 Se o seu "hoje" for agosto, os presets **Hoje**, **7 dias** e **30 dias** vão
 aparecer vazios — corretamente. Clique em **Mês passado** ou **90 dias** para ver
-os números.
+os números. (O caminho rápido acima imprime a data real em vez de você ter que
+lembrar disso.)
 
 Com as 15 fixtures você deve ver algo em torno de **R$ 3.947,10** de faturamento
-em julho.
+em julho. O caminho manual acima **não** popula `AttributionTouch` — essa tabela
+só é escrita pelo beacon público do checkout (`docs/checkout-attribution.md`) ou
+pelo `seed-demo.js`.
 
 ---
 
@@ -408,9 +465,9 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 | `ERR_MODULE_NOT_FOUND … scripts/lib/….js` ou `… src/config.js` ao rodar um script | `--experimental-strip-types` não resolve `.js` → `.ts` irmão | Rode o compilado: `node dist/scripts/<nome>.js` (tabela no Passo 5) |
 | `Can't reach database server at localhost:5432` | Docker parado | `docker compose up -d` |
 | Login não aceita nada | Banco sem usuário | Passo 5 (seed ou provisionamento) |
-| Cards de GA4 com `fonte de dados indisponível` | `ga4PropertyId` não configurado na organização | Configurações → ID da propriedade GA4 (Passo 8) |
-| `Sem dados no período selecionado` em tudo | Banco sem pedidos, ou período errado | Rode o sync (Passo 8) e escolha **Mês passado** / **90 dias** |
-| Sync roda e não grava nada | Organização sem credenciais Uappi — o agendador a ignora, mesmo em mock | Configurações → chave e segredo da Uappi (qualquer valor em mock) |
+| Cards de GA4 com `fonte de dados indisponível` | `ga4PropertyId` não configurado na organização | `node dist/scripts/seed-demo.js`, ou Configurações → ID da propriedade GA4 (Passo 8) |
+| `Sem dados no período selecionado` em tudo | Banco sem pedidos, ou período errado | `node dist/scripts/seed-demo.js` (Passo 8) e escolha **Mês passado** / **90 dias** — ele imprime o período real dos dados |
+| Sync roda e não grava nada | Organização sem credenciais Uappi — o agendador a ignora, mesmo em mock | `node dist/scripts/seed-demo.js`, ou Configurações → chave e segredo da Uappi (qualquer valor em mock) |
 | A Meta recusa o webhook | Verify token diferente | O valor no painel da Meta tem que ser idêntico ao do `.env` |
 | Bot responde "não encontrei este número" | Número não vinculado | Passo 5 da Parte 2 |
 | Bot sempre responde a mensagem de fallback | `ANTHROPIC_API_KEY` inválida | Confira a chave; o erro real aparece no log do worker |
