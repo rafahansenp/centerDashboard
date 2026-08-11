@@ -76,6 +76,20 @@ como uma segunda unidade TypeScript (`tsconfig.scripts.json`, mesmo mecanismo j�
 usado por `warm-cache.js`/`health-report.js`) — não precisa de nenhum passo extra
 além do `pnpm build` que a imagem já roda.
 
+## Acessando o dashboard
+
+A API (`dist/main.js`) também serve o dashboard React já compilado
+(`apps/web/dist`, empacotado na mesma imagem) na própria origem — não existe (nem é
+necessário) um serviço `web` separado no `docker-compose.prod.yml`. Depois do
+provisionamento acima, abra `http://<host>:3333/` (ou o domínio que aponta para o
+serviço `api`) e faça login com o e-mail/senha do `PROVISION_ADMIN_*`. Rotas do
+dashboard que não existem como arquivo (ex.: `/produtos`, uma rota client-side do
+react-router) caem de volta na `index.html`, então o deep-link funciona; rotas
+desconhecidas sob `/api`, `/auth`, `/public` e `/webhooks` continuam devolvendo 404
+JSON normalmente, nunca a página do dashboard. `/center-attribution.js` (usado pelo
+runbook `docs/checkout-attribution.md`) fica na mesma origem, em
+`http://<host>:3333/center-attribution.js`.
+
 ## Verificação pós-deploy
 
 ```bash

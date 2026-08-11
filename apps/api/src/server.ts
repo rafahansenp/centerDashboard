@@ -1,7 +1,10 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
 import type { AppDeps } from './deps.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerMetricRoutes } from './routes/metrics.js';
@@ -11,7 +14,25 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerWhatsAppRoutes } from './whatsapp/routes.js';
 import { registerLinkRoutes } from './whatsapp/link-routes.js';
 
-export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
+// No runtime empacotado, este arquivo compila para apps/api/dist/server.js;
+// dois níveis acima (apps/api/dist -> apps/api -> apps/) e então para
+// web/dist chega em apps/web/dist — o build do Vite (T25) que o Dockerfile
+// (T39) já produz no mesmo estágio que compila esta pasta, copiado inteiro
+// para a imagem de runtime. Sobrescrito nos testes via `opts.webRoot`.
+const DEFAULT_WEB_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+
+// Prefixos que NUNCA devem cair no fallback de SPA nem seriam,
+// coincidentemente, um arquivo estático de verdade: se uma rota real sob um
+// desses prefixos não bater em nenhum handler registrado, o cliente precisa
+// ver um 404 de API (JSON), não a index.html do dashboard.
+const RESERVED_PREFIXES = ['/api/', '/auth/', '/public/', '/webhooks/'];
+const RESERVED_EXACT = new Set(['/health']);
+
+function isReservedPath(pathname: string): boolean {
+  return RESERVED_EXACT.has(pathname) || RESERVED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+export async function buildServer(deps: AppDeps, opts: { webRoot?: string } = {}): Promise<FastifyInstance> {
   // `trustProxy` faz `request.ip` refletir `x-forwarded-for` em vez do
   // socket cru. Sem isso, atrás de qualquer load balancer/ingress em
   // produção, o rate limit do login (chave = request.ip) colapsa TODOS os
@@ -54,6 +75,37 @@ export async function buildServer(deps: AppDeps): Promise<FastifyInstance> {
   await registerSettingsRoutes(app, deps);
   await registerWhatsAppRoutes(app, deps);
   await registerLinkRoutes(app, deps);
+
+  // Serve o dashboard React (apps/web/dist) na mesma origem que a API — é o
+  // que `apps/web/src/lib/api-client.ts` já assume (paths relativos, sem
+  // base URL), e mantém `/center-attribution.js` (docs/checkout-attribution.md)
+  // alcançável sem um segundo serviço/reverse proxy. `wildcard: false` evita
+  // que o plugin registre a própria rota coringa GET '/*' — o fallback de SPA
+  // abaixo, via setNotFoundHandler, decide isso à mão para poder distinguir
+  // "arquivo do dashboard não encontrado" (serve index.html) de "rota de API
+  // não encontrada" (404 JSON), o que uma rota coringa genérica não sabe fazer.
+  await app.register(fastifyStatic, {
+    root: opts.webRoot ?? DEFAULT_WEB_ROOT,
+    wildcard: false,
+  });
+
+  // Rotas específicas (GET /api/..., /auth/me, etc.) SEMPRE vencem uma rota
+  // coringa no roteador do Fastify (find-my-way), não importa a ordem de
+  // registro — então este fallback só é alcançado quando NENHUM handler
+  // específico bateu. Ainda assim, distinguimos por prefixo: uma rota de API
+  // desconhecida deve devolver 404 JSON (o cliente sabe tratar isso), nunca a
+  // index.html do dashboard — só GET fora de /api, /auth, /public, /webhooks
+  // e /health cai no fallback de histórico do SPA (deep link em rota do
+  // react-router, ex.: /produtos).
+  app.setNotFoundHandler(async (request, reply) => {
+    const pathname = request.url.split('?')[0] ?? request.url;
+    if (request.method === 'GET' && !isReservedPath(pathname)) {
+      // `send` (usado por sendFile) já infere `text/html` pela extensão do
+      // arquivo — nenhum content-type manual necessário aqui.
+      return reply.sendFile('index.html');
+    }
+    return reply.status(404).send({ error: 'not_found', message: 'rota não encontrada' });
+  });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const statusCode = error.statusCode ?? 500;
