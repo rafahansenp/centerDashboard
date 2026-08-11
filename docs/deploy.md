@@ -32,6 +32,50 @@ endpoint de detalhe da Uappi. É esperado. Acompanhe:
 docker compose -f docker-compose.prod.yml logs -f sync
 ```
 
+## Provisionamento da primeira organização e do primeiro admin
+
+`prisma migrate deploy` (rodado automaticamente pelo serviço `api` acima) só cria o
+schema — o banco continua **vazio**. Sem uma organização e um usuário, ninguém
+consegue logar, a tela de Configurações (onde as credenciais da Uappi/GA4 são
+cadastradas) fica inalcançável, `syncAllOrganizations` não encontra nenhuma
+organização para sincronizar, e nenhum código de vínculo do WhatsApp pode ser
+gerado. Este passo é obrigatório antes de qualquer outra coisa funcionar.
+
+Rode, uma única vez, contra o serviço `api` já em pé:
+
+```bash
+docker compose -f docker-compose.prod.yml exec \
+  -e PROVISION_ORG_NAME="Nome da Loja" \
+  -e PROVISION_ADMIN_NAME="Seu Nome" \
+  -e PROVISION_ADMIN_EMAIL="voce@suaempresa.com" \
+  -e PROVISION_ADMIN_PASSWORD="escolha uma senha forte, 12+ caracteres" \
+  api node dist/scripts/provision-admin.js
+```
+
+**Sem credencial padrão.** O script não tem organização nem senha embutida — as
+quatro variáveis acima são obrigatórias e validadas (mesmo padrão Zod de
+`src/config.ts`); faltando ou inválida alguma, ele recusa antes de tocar no banco
+e lista todos os problemas de uma vez.
+
+**Idempotente, mas conservador: recusa em vez de sobrescrever.** Se o banco já tem
+qualquer usuário — seja porque este comando já rodou antes, seja por qualquer outro
+motivo — o script recusa (saída não-zero, "recusado: já existem N usuário(s)...") e
+**não altera nada**: não troca senha, não cria uma segunda organização, não faz
+upsert por e-mail. Rodar o comando de novo por engano (segunda vez, ou contra o
+banco errado) é seguro — na pior hipótese, é um no-op que avisa. A checagem e as
+duas escritas (organização + admin) rodam na mesma transação: se uma corrida
+concorrente (duas execuções simultâneas) colidir no e-mail, a organização criada
+naquela chamada específica é desfeita junto — nunca fica um registro órfão.
+
+Para adicionar organizações/usuários adicionais depois do primeiro admin, use a
+própria aplicação já provisionada (não há hoje uma segunda rota/script para isso —
+é escopo intencionalmente fora deste bootstrap).
+
+`dist/scripts/provision-admin.js` só existe porque `apps/api` compila `scripts/`
+como uma segunda unidade TypeScript (`tsconfig.scripts.json`, mesmo mecanismo já
+usado por `warm-cache.js`/`health-report.js`) — não precisa de nenhum passo extra
+além do `pnpm build` que a imagem já roda.
+
 ## Verificação pós-deploy
 
 ```bash
