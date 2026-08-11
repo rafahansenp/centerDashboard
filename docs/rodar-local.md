@@ -258,16 +258,54 @@ na 3333.
 > `/webhooks/*` não são redirecionadas — se você precisar testá-las, use a porta
 > 3333 direto (Opção A).
 
-### Passo 8 (opcional): sincronizar dados
+### Passo 8: popular os dados (não é opcional)
 
-Em modo mock o painel já mostra dados de fixture. Para exercitar o pipeline de
-sincronização:
+Logo após o login o painel aparece **vazio**, e isso é esperado: o seed e o
+provisionamento criam apenas organização e usuário — nenhum pedido, nenhuma
+configuração de integração. O modo mock troca os *clientes* externos por
+fixtures, mas não preenche o banco sozinho nem dispensa a configuração.
+
+Você vai ver dois estados diferentes, e eles significam coisas diferentes:
+
+| O que aparece no card | Significado |
+|---|---|
+| `fonte de dados indisponível` (vermelho) | A consulta **falhou**. Para os cards de GA4, quase sempre é `ga4PropertyId` não configurado |
+| `Sem dados no período selecionado` | A consulta **funcionou** e voltou vazia — falta dado no banco, ou o período não cobre os dados |
+
+**1. Configure a organização.** Pelo painel, em **Configurações**, preencha:
+
+- **ID da propriedade GA4** — em modo mock, qualquer valor serve (ex.: `000000000`).
+  Sem ele, todas as ferramentas de GA4 recusam antes de chegar ao mock.
+- **Chave e segredo da Uappi** — em modo mock, qualquer valor serve
+  (ex.: `mock` / `mock`). Não é decoração: o agendador só sincroniza
+  organizações que têm as duas credenciais gravadas, mesmo em modo mock.
+
+Salvar pelo painel é o caminho certo, porque as credenciais são cifradas na
+gravação.
+
+**2. Rode o sync**, em `apps/api` com o `.env` carregado:
 
 ```bash
-cd apps/api
-set -a && . ../../.env && set +a   # PowerShell: veja o Passo 3
-pnpm start:sync
+node dist/sync/sync-worker-main.js
 ```
+
+Ele faz o backfill e depois fica rodando em intervalos. Espere as primeiras
+linhas de log e pode interromper com `Ctrl+C` — o que já entrou fica no banco.
+
+Confira:
+
+```bash
+docker compose exec postgres psql -U center -d center \
+  -c 'SELECT count(*) FROM "CommerceOrder";'
+```
+
+**3. Escolha o período certo.** ⚠️ As fixtures da Uappi são de **julho de 2026**.
+Se o seu "hoje" for agosto, os presets **Hoje**, **7 dias** e **30 dias** vão
+aparecer vazios — corretamente. Clique em **Mês passado** ou **90 dias** para ver
+os números.
+
+Com as 15 fixtures você deve ver algo em torno de **R$ 3.947,10** de faturamento
+em julho.
 
 ---
 
@@ -370,7 +408,9 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 | `ERR_MODULE_NOT_FOUND … scripts/lib/….js` ou `… src/config.js` ao rodar um script | `--experimental-strip-types` não resolve `.js` → `.ts` irmão | Rode o compilado: `node dist/scripts/<nome>.js` (tabela no Passo 5) |
 | `Can't reach database server at localhost:5432` | Docker parado | `docker compose up -d` |
 | Login não aceita nada | Banco sem usuário | Passo 5 (seed ou provisionamento) |
-| Painel abre mas os números vêm zerados | Sem dados sincronizados | Confirme `MOCK_EXTERNAL_APIS="true"` (literal) ou rode o sync |
+| Cards de GA4 com `fonte de dados indisponível` | `ga4PropertyId` não configurado na organização | Configurações → ID da propriedade GA4 (Passo 8) |
+| `Sem dados no período selecionado` em tudo | Banco sem pedidos, ou período errado | Rode o sync (Passo 8) e escolha **Mês passado** / **90 dias** |
+| Sync roda e não grava nada | Organização sem credenciais Uappi — o agendador a ignora, mesmo em mock | Configurações → chave e segredo da Uappi (qualquer valor em mock) |
 | A Meta recusa o webhook | Verify token diferente | O valor no painel da Meta tem que ser idêntico ao do `.env` |
 | Bot responde "não encontrei este número" | Número não vinculado | Passo 5 da Parte 2 |
 | Bot sempre responde a mensagem de fallback | `ANTHROPIC_API_KEY` inválida | Confira a chave; o erro real aparece no log do worker |
