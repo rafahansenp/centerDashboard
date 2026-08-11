@@ -58,11 +58,19 @@ hexadecimais, nunca o client_id original.
 ## O que acontece se os passos 2 e 3 não forem feitos
 
 O script continua registrando toques (passo 1), mas o pedido chega sem
-atribuição. Nesse caso o sistema tenta casar pelo hash do e-mail dentro de uma
-janela de 30 dias — funciona, mas perde os pedidos de clientes que compraram com
-e-mail diferente do usado na navegação. Das 6 perguntas do Grupo C, apenas
-"quais canais possuem maior ticket médio" continua exata (usa o campo `canal`
-nativo da Uappi).
+`visitorHash` — e **não existe fallback**. O join da atribuição é feito
+exclusivamente por `visitorHash`; sem ele, o toque e o pedido nunca se
+encontram, e a atribuição daquele pedido é perdida por completo.
+
+> A coluna `AttributionTouch.emailHash` existe no schema e está indexada, mas
+> hoje nada a preenche (o script desta página nunca envia e-mail) e nada a
+> consulta. Ela é espaço reservado para um casamento por e-mail que ainda não
+> foi construído — não conte com ela.
+
+Das 6 perguntas do Grupo C, apenas "quais canais possuem maior ticket médio"
+continua exata, porque usa o campo `canal` nativo da Uappi e não depende de
+atribuição. As outras 5 ficam sem resposta confiável até os passos 2 e 3 serem
+feitos.
 
 ## Privacidade
 
