@@ -122,17 +122,22 @@ echo $env:DATABASE_URL      # PowerShell
 
 ### Passo 4: instalar, migrar e compilar
 
-No mesmo terminal do passo anterior:
+No mesmo terminal do passo anterior, **sem sair de `apps/api`**:
 
 ```bash
 pnpm install
 pnpm exec prisma generate
 pnpm exec prisma migrate deploy
-cd ../.. && pnpm build
+pnpm -w build
 ```
 
 Você deve ver `No pending migrations to apply.` ou a lista de migrações
 aplicadas.
+
+> O `-w` manda o comando para a raiz do workspace sem te mover de pasta. A
+> partir daqui **fique em `apps/api` até o fim da Parte 1** — todos os comandos
+> seguintes (`db:seed`, `start`, `start:sync`) são scripts desse pacote e não
+> existem na raiz.
 
 O `pnpm build` compila os 11 pacotes, inclusive os três servidores MCP que a API
 executa como processos filhos e o `apps/web/dist` que a API serve como painel.
@@ -143,12 +148,21 @@ executa como processos filhos e o `apps/web/dist` que a API serve como painel.
 
 ### Passo 5: criar o primeiro usuário
 
-Existem dois caminhos. Para desenvolvimento local, o seed é mais rápido (no
-terminal com o `.env` já carregado, dentro de `apps/api`):
+Existem dois caminhos. Para desenvolvimento local, o seed é mais rápido — ainda
+em `apps/api`, no terminal com o `.env` carregado:
 
 ```bash
 pnpm db:seed
 ```
+
+Sucesso é a linha `seed concluído: admin@center.local / center-dev-123`.
+
+> ⚠️ Se aparecer `Command "db:seed" not found` (ou, em português, *"a sintaxe do
+> nome do arquivo... está incorreta"*), você está na **raiz** do repositório e
+> não em `apps/api` — esse script só existe no pacote da API. Rode `cd apps/api`
+> e repita. De qualquer pasta, a alternativa é
+> `pnpm --filter @center/api db:seed`, mas o `.env` precisa estar carregado no
+> terminal do mesmo jeito.
 
 Isso cria a organização `org_dev` e o login **`admin@center.local` /
 `center-dev-123`**.
@@ -322,6 +336,7 @@ FROM "ToolCallLog" ORDER BY "createdAt" DESC LIMIT 10;
 | `Configuração inválida — DATABASE_URL: Required…` | O `.env` não foi carregado neste terminal | Refaça o Passo 3 |
 | Prisma: `Environment variable not found: DATABASE_URL` | Idem — o Prisma procura o `.env` em `apps/api/`, não na raiz | Refaça o Passo 3 antes de rodar o Prisma |
 | `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prisma" not found` | Mensagem enganosa do pnpm: o Prisma **foi** encontrado e falhou por outro motivo | Leia o erro logo acima dela — quase sempre é o `DATABASE_URL` |
+| `Command "db:seed" not found` / `a sintaxe do nome do arquivo... está incorreta` | Você está na raiz; `db:seed`, `start`, `start:sync` e `start:whatsapp` só existem em `apps/api` | `cd apps/api` (e recarregue o `.env` se for terminal novo) |
 | `ERR_MODULE_NOT_FOUND … config.js` | Você usou `pnpm dev` na `apps/api` | Use `pnpm build` + `pnpm start` |
 | `Can't reach database server at localhost:5432` | Docker parado | `docker compose up -d` |
 | Login não aceita nada | Banco sem usuário | Passo 5 (seed ou provisionamento) |
