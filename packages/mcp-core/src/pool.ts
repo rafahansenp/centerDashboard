@@ -1,5 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   MetricDescriptorSchema, MetricSeriesSchema, MetricSourceSchema,
   type MetricDescriptor, type MetricQuery, type MetricSeries, type MetricSource,
@@ -52,7 +52,16 @@ export class McpPool {
         const transport = new StdioClientTransport({
           command: config.command,
           args: config.args,
-          env: { ...(process.env as Record<string, string>), ...(config.env ?? {}) },
+          // NUNCA repassar `process.env` inteiro: o processo pai carrega
+          // PII_PEPPER, CREDENTIALS_ENCRYPTION_KEY, JWT_SECRET e os tokens de
+          // WhatsApp/Anthropic. Um MCP server (e qualquer dependência
+          // transitiva dele) só precisa do que o chamador entrega
+          // explicitamente em `config.env` — é o que torna real o escopo por
+          // servidor declarado nos composition roots. `getDefaultEnvironment()`
+          // é a allowlist do próprio SDK (PATH, HOME e afins), usada por
+          // padrão quando `env` é omitido; passar `env` opta por fora dela, e
+          // por isso ela é reintroduzida aqui de propósito.
+          env: { ...getDefaultEnvironment(), ...(config.env ?? {}) },
         });
         const client = new Client({ name: `center-pool-${config.source}`, version: '1.0.0' });
         await client.connect(transport);

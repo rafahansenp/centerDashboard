@@ -106,6 +106,40 @@ describe('MetricGateway', () => {
     expect(setSpy).toHaveBeenCalledWith(expect.any(String), expect.any(String), 300);
   });
 
+  it('resolves "today" in São Paulo, not UTC, when choosing the TTL', async () => {
+    // 2026-03-16T01:30:00Z é 2026-03-15 22:30 em São Paulo: o UTC já virou o
+    // dia, São Paulo não. Um intervalo terminando em 2026-03-15 ainda alcança
+    // hoje e continua sendo escrito pelas fontes.
+    //
+    // Com a comparação feita em UTC, este intervalo era classificado como
+    // período fechado e cacheado por 24h — congelando "quanto vendemos hoje?"
+    // todo dia entre 21h e meia-noite, e mantendo a resposta errada no dia
+    // seguinte, já que "ontem" resolve para o mesmo from/to e a mesma chave.
+    const { pool } = fakePool();
+    const cache = new MemoryCacheStore();
+    const setSpy = jest.spyOn(cache, 'set');
+    const lateEvening = () => new Date('2026-03-16T01:30:00Z');
+
+    await new MetricGateway(pool, cache, { now: lateEvening })
+      .queryMetric({ ...query, to: '2026-03-15' });
+
+    expect(setSpy).toHaveBeenCalledWith(expect.any(String), expect.any(String), 300);
+  });
+
+  it('still uses a long TTL for a period closed in São Paulo terms', async () => {
+    // Mesmo instante do teste acima; só o intervalo muda. Garante que a
+    // correção não transformou todo TTL em curto.
+    const { pool } = fakePool();
+    const cache = new MemoryCacheStore();
+    const setSpy = jest.spyOn(cache, 'set');
+    const lateEvening = () => new Date('2026-03-16T01:30:00Z');
+
+    await new MetricGateway(pool, cache, { now: lateEvening })
+      .queryMetric({ ...query, to: '2026-03-14' });
+
+    expect(setSpy).toHaveBeenCalledWith(expect.any(String), expect.any(String), 86_400);
+  });
+
   it('caches named analysis tools too', async () => {
     const { pool, callTool } = fakePool();
     const gateway = new MetricGateway(pool, new MemoryCacheStore(), { now });

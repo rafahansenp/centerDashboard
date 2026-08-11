@@ -9,6 +9,15 @@ export interface MetricGatewayOptions {
   now?: () => Date;
 }
 
+/**
+ * O fuso do negócio, não o do servidor. Todo o resto do sistema resolve "hoje"
+ * em São Paulo (worker do WhatsApp, rota de análise, sync, App.tsx); o TTL
+ * precisa concordar com eles, senão entre 21h e 23h59 — quando o UTC já virou
+ * mas São Paulo não — um intervalo que termina hoje é classificado como
+ * período fechado e cacheado por 24h.
+ */
+const BUSINESS_TIME_ZONE = 'America/Sao_Paulo';
+
 export interface CallToolOptions {
   /** `false` desliga o cache — use em ferramentas que listam registros voláteis. */
   cache?: boolean;
@@ -110,7 +119,8 @@ export class MetricGateway {
    */
   private ttlFor(rangeEnd: string | undefined): number {
     if (!rangeEnd) return SHORT_TTL_SECONDS;
-    const today = this.now().toISOString().slice(0, 10);
+    // 'en-CA' devolve YYYY-MM-DD, comparável lexicograficamente com rangeEnd.
+    const today = this.now().toLocaleDateString('en-CA', { timeZone: BUSINESS_TIME_ZONE });
     return rangeEnd >= today ? SHORT_TTL_SECONDS : LONG_TTL_SECONDS;
   }
 }
