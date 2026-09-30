@@ -1,4 +1,26 @@
-/** Pedidos determinísticos para desenvolvimento e demonstração sem credenciais reais. */
+/**
+ * Pedidos determinísticos para desenvolvimento e demonstração sem credenciais reais.
+ *
+ * Todo o catálogo é inspirado nos produtos mais vendidos da Growth
+ * Suplementos (whey, creatina, pré-treino, barras, vitaminas, aminoácidos,
+ * kits) — pedido do usuário para popular o "Produtos mais vendidos" com algo
+ * reconhecível. Nomes de produto são informação pública (o que a marca
+ * vende), não dados de vendas reais da Growth — os números aqui são
+ * inventados, como todo o resto desta fixture.
+ *
+ * `packages/uappi-client/src/__tests__/mock-client.test.ts` depende da
+ * CONTAGEM de pedidos (`FIXTURE_ORDER_NUMBERS.length`), lida dinamicamente —
+ * adicionar ou renomear produtos é seguro, só não remova uma chave de pedido
+ * (`PED-000N`) inteira sem checar esse teste.
+ *
+ * Histórico: PED-0001 a PED-0015 eram um catálogo genérico de vestuário
+ * (Camiseta, Meia, Tênis, Boné); PED-0016 a PED-0025 foram a primeira leva
+ * de produtos Growth. Os 5 produtos mais vendidos do catálogo antigo (Tênis
+ * Runner, Camiseta Preta, Whey Protein Concentrado Chocolate, Boné, Meia)
+ * foram trocados por outros itens Growth a pedido do usuário — mesmo
+ * SKU/preço por item trocado, só a identidade do produto mudou, então
+ * nenhum total de pedido se altera.
+ */
 export const FIXTURE_ORDERS: Record<string, unknown> = {
   'PED-0001': {
     idPedido: 9001, numeroPedido: 'PED-0001', canal: 'site', origem: 'organico',
@@ -7,8 +29,8 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 501, email: 'ana.mock@example.com', nomeRazao: 'Ana (mock)' },
     valores: { subtotal: 189.9, frete: 15.0, descontos: 0, totalPedido: 204.9 },
     pagamento: [{ descricao: 'Pix', valor: 204.9 }],
-    itens: [{ sku: 'CAM-001', descricao: 'Camiseta Preta', categoria: 'Vestuário', quantidade: 2, valorUnitario: 79.95, valorTotal: 159.9 },
-             { sku: 'MEI-002', descricao: 'Meia', categoria: 'Vestuário', quantidade: 1, valorUnitario: 30.0, valorTotal: 30.0 }],
+    itens: [{ sku: 'BCAA-006', descricao: 'BCAA 2400 100 cáps', categoria: 'Aminoácidos', quantidade: 2, valorUnitario: 79.95, valorTotal: 159.9 },
+             { sku: 'OMEGA-005', descricao: 'Ômega 3 1000mg 120 cáps', categoria: 'Vitaminas', quantidade: 1, valorUnitario: 30.0, valorTotal: 30.0 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile', centerVisitorId: 'mock-visitor-1.1699999001' },
   },
   'PED-0002': {
@@ -18,7 +40,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 502, email: 'bruno.mock@example.com', nomeRazao: 'Bruno (mock)' },
     valores: { subtotal: 349.9, frete: 0, descontos: 20.0, totalPedido: 329.9 },
     pagamento: [{ descricao: 'Cartão de crédito', valor: 329.9 }],
-    itens: [{ sku: 'TEN-003', descricao: 'Tênis Runner', categoria: 'Calçados', quantidade: 1, valorUnitario: 349.9, valorTotal: 349.9 }],
+    itens: [{ sku: 'KIT-012', descricao: 'Kit Whey Protein + Creatina Growth', categoria: 'Kits', quantidade: 1, valorUnitario: 349.9, valorTotal: 349.9 }],
     informacoesAdicionais: { utmSource: 'facebook', utmMedium: 'cpc', utmCampaign: 'natal', device: 'desktop', centerVisitorId: 'mock-visitor-2.1699999002' },
   },
   'PED-0003': {
@@ -28,7 +50,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 503, email: 'carla.mock@example.com', nomeRazao: 'Carla (mock)' },
     valores: { subtotal: 99.9, frete: 12.0, descontos: 0, totalPedido: 111.9 },
     pagamento: [{ descricao: 'Boleto', valor: 111.9 }],
-    itens: [{ sku: 'BON-004', descricao: 'Boné', categoria: 'Acessórios', quantidade: 1, valorUnitario: 99.9, valorTotal: 99.9 }],
+    itens: [{ sku: 'GLUT-008', descricao: 'Glutamina 300g', categoria: 'Aminoácidos', quantidade: 1, valorUnitario: 99.9, valorTotal: 99.9 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile' },
   },
   'PED-0004': {
@@ -38,7 +60,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 504, email: 'diego.mock@example.com', nomeRazao: 'Diego (mock)' },
     valores: { subtotal: 259.8, frete: 18.0, descontos: 0, totalPedido: 277.8 },
     pagamento: [{ descricao: 'Boleto', valor: 277.8 }],
-    itens: [{ sku: 'CAM-001', descricao: 'Camiseta Preta', categoria: 'Vestuário', quantidade: 2, valorUnitario: 129.9, valorTotal: 259.8 }],
+    itens: [{ sku: 'BCAA-006', descricao: 'BCAA 2400 100 cáps', categoria: 'Aminoácidos', quantidade: 2, valorUnitario: 129.9, valorTotal: 259.8 }],
     informacoesAdicionais: {},
   },
   'PED-0005': {
@@ -48,7 +70,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 505, email: 'elis.mock@example.com', nomeRazao: 'Elis (mock)' },
     valores: { subtotal: 449.9, frete: 0, descontos: 0, totalPedido: 449.9 },
     pagamento: [{ descricao: 'Cartão de crédito', valor: 449.9 }],
-    itens: [{ sku: 'TEN-003', descricao: 'Tênis Runner', categoria: 'Calçados', quantidade: 1, valorUnitario: 449.9, valorTotal: 449.9 }],
+    itens: [{ sku: 'KIT-012', descricao: 'Kit Whey Protein + Creatina Growth', categoria: 'Kits', quantidade: 1, valorUnitario: 449.9, valorTotal: 449.9 }],
     informacoesAdicionais: { utmSource: 'facebook', utmMedium: 'cpc', utmCampaign: 'natal', device: 'mobile' },
   },
   'PED-0006': {
@@ -58,7 +80,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 501, email: 'ana.mock@example.com', nomeRazao: 'Ana (mock)' },
     valores: { subtotal: 89.9, frete: 10.0, descontos: 0, totalPedido: 99.9 },
     pagamento: [{ descricao: 'Pix', valor: 99.9 }],
-    itens: [{ sku: 'MEI-002', descricao: 'Meia', categoria: 'Vestuário', quantidade: 3, valorUnitario: 29.97, valorTotal: 89.9 }],
+    itens: [{ sku: 'OMEGA-005', descricao: 'Ômega 3 1000mg 120 cáps', categoria: 'Vitaminas', quantidade: 3, valorUnitario: 29.97, valorTotal: 89.9 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile', centerVisitorId: 'mock-visitor-1.1699999001' },
   },
   'PED-0007': {
@@ -68,7 +90,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 506, email: 'fabio.mock@example.com', nomeRazao: 'Fábio (mock)' },
     valores: { subtotal: 129.9, frete: 15.0, descontos: 0, totalPedido: 144.9 },
     pagamento: [{ descricao: 'Cartão de crédito', valor: 144.9 }],
-    itens: [{ sku: 'BON-004', descricao: 'Boné', categoria: 'Acessórios', quantidade: 1, valorUnitario: 129.9, valorTotal: 129.9 }],
+    itens: [{ sku: 'GLUT-008', descricao: 'Glutamina 300g', categoria: 'Aminoácidos', quantidade: 1, valorUnitario: 129.9, valorTotal: 129.9 }],
     informacoesAdicionais: { utmSource: 'direto', device: 'desktop' },
   },
   'PED-0008': {
@@ -78,8 +100,8 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 507, email: 'giovana.mock@example.com', nomeRazao: 'Giovana (mock)' },
     valores: { subtotal: 599.9, frete: 0, descontos: 50.0, totalPedido: 549.9 },
     pagamento: [{ descricao: 'Pix', valor: 549.9 }],
-    itens: [{ sku: 'TEN-003', descricao: 'Tênis Runner', categoria: 'Calçados', quantidade: 1, valorUnitario: 349.9, valorTotal: 349.9 },
-             { sku: 'CAM-001', descricao: 'Camiseta Preta', categoria: 'Vestuário', quantidade: 2, valorUnitario: 125.0, valorTotal: 250.0 }],
+    itens: [{ sku: 'KIT-012', descricao: 'Kit Whey Protein + Creatina Growth', categoria: 'Kits', quantidade: 1, valorUnitario: 349.9, valorTotal: 349.9 },
+             { sku: 'BCAA-006', descricao: 'BCAA 2400 100 cáps', categoria: 'Aminoácidos', quantidade: 2, valorUnitario: 125.0, valorTotal: 250.0 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'tablet' },
   },
   'PED-0009': {
@@ -89,8 +111,8 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 508, email: 'henrique.mock@example.com', nomeRazao: 'Henrique (mock)' },
     valores: { subtotal: 159.8, frete: 12.0, descontos: 0, totalPedido: 171.8 },
     pagamento: [{ descricao: 'Boleto', valor: 171.8 }],
-    itens: [{ sku: 'BON-004', descricao: 'Boné', categoria: 'Acessórios', quantidade: 1, valorUnitario: 99.9, valorTotal: 99.9 },
-             { sku: 'MEI-002', descricao: 'Meia', categoria: 'Vestuário', quantidade: 2, valorUnitario: 29.95, valorTotal: 59.9 }],
+    itens: [{ sku: 'GLUT-008', descricao: 'Glutamina 300g', categoria: 'Aminoácidos', quantidade: 1, valorUnitario: 99.9, valorTotal: 99.9 },
+             { sku: 'OMEGA-005', descricao: 'Ômega 3 1000mg 120 cáps', categoria: 'Vitaminas', quantidade: 2, valorUnitario: 29.95, valorTotal: 59.9 }],
     informacoesAdicionais: { utmSource: 'facebook', utmMedium: 'cpc', utmCampaign: 'natal', device: 'mobile' },
   },
   'PED-0010': {
@@ -100,7 +122,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 509, email: 'isabela.mock@example.com', nomeRazao: 'Isabela (mock)' },
     valores: { subtotal: 399.9, frete: 0, descontos: 30.0, totalPedido: 369.9 },
     pagamento: [{ descricao: 'Cartão de crédito', valor: 369.9 }],
-    itens: [{ sku: 'TEN-003', descricao: 'Tênis Runner', categoria: 'Calçados', quantidade: 1, valorUnitario: 399.9, valorTotal: 399.9 }],
+    itens: [{ sku: 'KIT-012', descricao: 'Kit Whey Protein + Creatina Growth', categoria: 'Kits', quantidade: 1, valorUnitario: 399.9, valorTotal: 399.9 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'desktop' },
   },
   'PED-0011': {
@@ -110,8 +132,8 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 510, email: 'joao.mock@example.com', nomeRazao: 'João (mock)' },
     valores: { subtotal: 299.6, frete: 0, descontos: 0, totalPedido: 299.6 },
     pagamento: [{ descricao: 'Pix', valor: 299.6 }],
-    itens: [{ sku: 'CAM-001', descricao: 'Camiseta Preta', categoria: 'Vestuário', quantidade: 3, valorUnitario: 89.9, valorTotal: 269.7 },
-             { sku: 'MEI-002', descricao: 'Meia', categoria: 'Vestuário', quantidade: 1, valorUnitario: 29.9, valorTotal: 29.9 }],
+    itens: [{ sku: 'BCAA-006', descricao: 'BCAA 2400 100 cáps', categoria: 'Aminoácidos', quantidade: 3, valorUnitario: 89.9, valorTotal: 269.7 },
+             { sku: 'OMEGA-005', descricao: 'Ômega 3 1000mg 120 cáps', categoria: 'Vitaminas', quantidade: 1, valorUnitario: 29.9, valorTotal: 29.9 }],
     informacoesAdicionais: { utmSource: 'instagram', utmMedium: 'social', utmCampaign: 'natal', device: 'mobile' },
   },
   'PED-0012': {
@@ -121,7 +143,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 511, email: 'karina.mock@example.com', nomeRazao: 'Karina (mock)' },
     valores: { subtotal: 120.0, frete: 15.0, descontos: 10.0, totalPedido: 125.0 },
     pagamento: [{ descricao: 'Boleto', valor: 125.0 }],
-    itens: [{ sku: 'BON-004', descricao: 'Boné', categoria: 'Acessórios', quantidade: 2, valorUnitario: 60.0, valorTotal: 120.0 }],
+    itens: [{ sku: 'GLUT-008', descricao: 'Glutamina 300g', categoria: 'Aminoácidos', quantidade: 2, valorUnitario: 60.0, valorTotal: 120.0 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'tablet' },
   },
   'PED-0013': {
@@ -131,7 +153,7 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 512, email: 'lucas.mock@example.com', nomeRazao: 'Lucas (mock)' },
     valores: { subtotal: 279.9, frete: 20.0, descontos: 0, totalPedido: 299.9 },
     pagamento: [{ descricao: 'Cartão de crédito', valor: 299.9 }],
-    itens: [{ sku: 'TEN-003', descricao: 'Tênis Runner', categoria: 'Calçados', quantidade: 1, valorUnitario: 279.9, valorTotal: 279.9 }],
+    itens: [{ sku: 'KIT-012', descricao: 'Kit Whey Protein + Creatina Growth', categoria: 'Kits', quantidade: 1, valorUnitario: 279.9, valorTotal: 279.9 }],
     informacoesAdicionais: { utmSource: 'email', utmMedium: 'email', utmCampaign: 'natal', device: 'desktop' },
   },
   'PED-0014': {
@@ -141,8 +163,8 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 513, email: 'mariana.mock@example.com', nomeRazao: 'Mariana (mock)' },
     valores: { subtotal: 149.9, frete: 12.0, descontos: 0, totalPedido: 161.9 },
     pagamento: [{ descricao: 'Pix', valor: 161.9 }],
-    itens: [{ sku: 'CAM-001', descricao: 'Camiseta Preta', categoria: 'Vestuário', quantidade: 1, valorUnitario: 99.9, valorTotal: 99.9 },
-             { sku: 'MEI-002', descricao: 'Meia', categoria: 'Vestuário', quantidade: 2, valorUnitario: 25.0, valorTotal: 50.0 }],
+    itens: [{ sku: 'BCAA-006', descricao: 'BCAA 2400 100 cáps', categoria: 'Aminoácidos', quantidade: 1, valorUnitario: 99.9, valorTotal: 99.9 },
+             { sku: 'OMEGA-005', descricao: 'Ômega 3 1000mg 120 cáps', categoria: 'Vitaminas', quantidade: 2, valorUnitario: 25.0, valorTotal: 50.0 }],
     informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile' },
   },
   'PED-0015': {
@@ -152,8 +174,113 @@ export const FIXTURE_ORDERS: Record<string, unknown> = {
     cliente: { idCliente: 514, email: 'nicolas.mock@example.com', nomeRazao: 'Nicolas (mock)' },
     valores: { subtotal: 349.9, frete: 0, descontos: 0, totalPedido: 349.9 },
     pagamento: [{ descricao: 'Pix', valor: 174.95 }, { descricao: 'Cartão de crédito', valor: 174.95 }],
-    itens: [{ sku: 'TEN-003', descricao: 'Tênis Runner', categoria: 'Calçados', quantidade: 1, valorUnitario: 349.9, valorTotal: 349.9 }],
+    itens: [{ sku: 'KIT-012', descricao: 'Kit Whey Protein + Creatina Growth', categoria: 'Kits', quantidade: 1, valorUnitario: 349.9, valorTotal: 349.9 }],
     informacoesAdicionais: { utmSource: 'facebook', utmMedium: 'cpc', utmCampaign: 'natal', device: 'mobile' },
+  },
+  'PED-0016': {
+    idPedido: 9016, numeroPedido: 'PED-0016', canal: 'site', origem: 'organico',
+    dataEmissao: '2026-07-21 09:20:00', moeda: 'BRL',
+    status: { id: 3, descricao: 'Pagamento aprovado' },
+    cliente: { idCliente: 515, email: 'otavio.mock@example.com', nomeRazao: 'Otávio (mock)' },
+    valores: { subtotal: 159.8, frete: 0, descontos: 0, totalPedido: 159.8 },
+    pagamento: [{ descricao: 'Pix', valor: 159.8 }],
+    itens: [{ sku: 'MULT-004', descricao: 'Multivitamínico Daily Vit 60 cáps', categoria: 'Vitaminas', quantidade: 1, valorUnitario: 89.9, valorTotal: 89.9 },
+             { sku: 'CREA-002', descricao: 'Creatina Monohidratada 300g', categoria: 'Creatina', quantidade: 1, valorUnitario: 69.9, valorTotal: 69.9 }],
+    informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile' },
+  },
+  'PED-0017': {
+    idPedido: 9017, numeroPedido: 'PED-0017', canal: 'app', origem: 'direto',
+    dataEmissao: '2026-07-22 14:05:00', moeda: 'BRL',
+    status: { id: 4, descricao: 'Entregue' },
+    cliente: { idCliente: 516, email: 'patricia.mock@example.com', nomeRazao: 'Patrícia (mock)' },
+    valores: { subtotal: 119.9, frete: 15.0, descontos: 0, totalPedido: 134.9 },
+    pagamento: [{ descricao: 'Cartão de crédito', valor: 134.9 }],
+    itens: [{ sku: 'WHEYISO-010', descricao: 'Whey Protein Isolado 900g - Baunilha', categoria: 'Whey Protein', quantidade: 1, valorUnitario: 119.9, valorTotal: 119.9 }],
+    informacoesAdicionais: { utmSource: 'direto', device: 'desktop' },
+  },
+  'PED-0018': {
+    idPedido: 9018, numeroPedido: 'PED-0018', canal: 'site', origem: 'organico',
+    dataEmissao: '2026-07-22 19:40:00', moeda: 'BRL',
+    status: { id: 5, descricao: 'Cancelado pelo cliente' },
+    cliente: { idCliente: 517, email: 'rafael.mock@example.com', nomeRazao: 'Rafael (mock)' },
+    valores: { subtotal: 89.9, frete: 12.0, descontos: 0, totalPedido: 101.9 },
+    pagamento: [{ descricao: 'Boleto', valor: 101.9 }],
+    itens: [{ sku: 'PRET-003', descricao: 'Pré-Treino Growth 300g', categoria: 'Pré-treino', quantidade: 1, valorUnitario: 89.9, valorTotal: 89.9 }],
+    informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile' },
+  },
+  'PED-0019': {
+    idPedido: 9019, numeroPedido: 'PED-0019', canal: 'marketplace', origem: 'pago',
+    dataEmissao: '2026-07-23 10:55:00', moeda: 'BRL',
+    status: { id: 6, descricao: 'Pagamento recusado' },
+    cliente: { idCliente: 518, email: 'sabrina.mock@example.com', nomeRazao: 'Sabrina (mock)' },
+    valores: { subtotal: 139.8, frete: 0, descontos: 0, totalPedido: 139.8 },
+    pagamento: [{ descricao: 'Cartão de crédito', valor: 139.8 }],
+    itens: [{ sku: 'BARRA-007', descricao: 'Barra de Proteína Beijinho (cx 12un)', categoria: 'Barras', quantidade: 2, valorUnitario: 69.9, valorTotal: 139.8 }],
+    informacoesAdicionais: { utmSource: 'instagram', utmMedium: 'social', utmCampaign: 'natal', device: 'mobile' },
+  },
+  'PED-0020': {
+    idPedido: 9020, numeroPedido: 'PED-0020', canal: 'site', origem: 'organico',
+    dataEmissao: '2026-07-24 08:15:00', moeda: 'BRL',
+    status: { id: 2, descricao: 'Em separação' },
+    cliente: { idCliente: 501, email: 'ana.mock@example.com', nomeRazao: 'Ana (mock)' },
+    valores: { subtotal: 89.8, frete: 10.0, descontos: 0, totalPedido: 99.8 },
+    pagamento: [{ descricao: 'Pix', valor: 99.8 }],
+    itens: [{ sku: 'MULT-004', descricao: 'Multivitamínico Daily Vit 60 cáps', categoria: 'Vitaminas', quantidade: 1, valorUnitario: 49.9, valorTotal: 49.9 },
+             { sku: 'OMEGA-005', descricao: 'Ômega 3 1000mg 120 cáps', categoria: 'Vitaminas', quantidade: 1, valorUnitario: 39.9, valorTotal: 39.9 }],
+    informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'mobile' },
+  },
+  'PED-0021': {
+    idPedido: 9021, numeroPedido: 'PED-0021', canal: 'app', origem: 'direto',
+    dataEmissao: '2026-07-25 16:30:00', moeda: 'BRL',
+    status: { id: 7, descricao: 'Enviado' },
+    cliente: { idCliente: 519, email: 'thiago.mock@example.com', nomeRazao: 'Thiago (mock)' },
+    valores: { subtotal: 114.8, frete: 15.0, descontos: 0, totalPedido: 129.8 },
+    pagamento: [{ descricao: 'Cartão de crédito', valor: 129.8 }],
+    itens: [{ sku: 'BCAA-006', descricao: 'BCAA 2400 100 cáps', categoria: 'Aminoácidos', quantidade: 1, valorUnitario: 59.9, valorTotal: 59.9 },
+             { sku: 'GLUT-008', descricao: 'Glutamina 300g', categoria: 'Aminoácidos', quantidade: 1, valorUnitario: 54.9, valorTotal: 54.9 }],
+    informacoesAdicionais: { utmSource: 'email', utmMedium: 'email', utmCampaign: 'natal', device: 'desktop' },
+  },
+  'PED-0022': {
+    idPedido: 9022, numeroPedido: 'PED-0022', canal: 'site', origem: 'organico',
+    dataEmissao: '2026-07-26 12:10:00', moeda: 'BRL',
+    status: { id: 3, descricao: 'Pagamento aprovado' },
+    cliente: { idCliente: 520, email: 'vanessa.mock@example.com', nomeRazao: 'Vanessa (mock)' },
+    valores: { subtotal: 179.8, frete: 0, descontos: 15.0, totalPedido: 164.8 },
+    pagamento: [{ descricao: 'Pix', valor: 164.8 }],
+    itens: [{ sku: 'MULT-004', descricao: 'Multivitamínico Daily Vit 60 cáps', categoria: 'Vitaminas', quantidade: 2, valorUnitario: 89.9, valorTotal: 179.8 }],
+    informacoesAdicionais: { utmSource: 'google', utmMedium: 'cpc', utmCampaign: 'black-friday', device: 'tablet' },
+  },
+  'PED-0023': {
+    idPedido: 9023, numeroPedido: 'PED-0023', canal: 'site', origem: 'organico',
+    dataEmissao: '2026-07-27 09:50:00', moeda: 'BRL',
+    status: { id: 8, descricao: 'Devolvido' },
+    cliente: { idCliente: 507, email: 'giovana.mock@example.com', nomeRazao: 'Giovana (mock)' },
+    valores: { subtotal: 44.9, frete: 12.0, descontos: 0, totalPedido: 56.9 },
+    pagamento: [{ descricao: 'Boleto', valor: 56.9 }],
+    itens: [{ sku: 'ALB-009', descricao: 'Albumina 500g', categoria: 'Whey Protein', quantidade: 1, valorUnitario: 44.9, valorTotal: 44.9 }],
+    informacoesAdicionais: { utmSource: 'facebook', utmMedium: 'cpc', utmCampaign: 'natal', device: 'mobile' },
+  },
+  'PED-0024': {
+    idPedido: 9024, numeroPedido: 'PED-0024', canal: 'marketplace', origem: 'pago',
+    dataEmissao: '2026-07-28 15:25:00', moeda: 'BRL',
+    status: { id: 9, descricao: 'Aguardando retirada' },
+    cliente: { idCliente: 521, email: 'william.mock@example.com', nomeRazao: 'William (mock)' },
+    valores: { subtotal: 169.8, frete: 0, descontos: 10.0, totalPedido: 159.8 },
+    pagamento: [{ descricao: 'Pix', valor: 159.8 }],
+    itens: [{ sku: 'CREA-011', descricao: 'Creatina Monohidratada Creapure 250g', categoria: 'Creatina', quantidade: 1, valorUnitario: 79.9, valorTotal: 79.9 },
+             { sku: 'MULT-004', descricao: 'Multivitamínico Daily Vit 60 cáps', categoria: 'Vitaminas', quantidade: 1, valorUnitario: 89.9, valorTotal: 89.9 }],
+    informacoesAdicionais: { utmSource: 'instagram', utmMedium: 'social', utmCampaign: 'black-friday', device: 'mobile' },
+  },
+  'PED-0025': {
+    idPedido: 9025, numeroPedido: 'PED-0025', canal: 'app', origem: 'direto',
+    dataEmissao: '2026-07-29 11:00:00', moeda: 'BRL',
+    status: { id: 4, descricao: 'Entregue' },
+    cliente: { idCliente: 522, email: 'yasmin.mock@example.com', nomeRazao: 'Yasmin (mock)' },
+    valores: { subtotal: 159.8, frete: 0, descontos: 0, totalPedido: 159.8 },
+    pagamento: [{ descricao: 'Cartão de crédito', valor: 159.8 }],
+    itens: [{ sku: 'PRET-003', descricao: 'Pré-Treino Growth 300g', categoria: 'Pré-treino', quantidade: 1, valorUnitario: 89.9, valorTotal: 89.9 },
+             { sku: 'BARRA-007', descricao: 'Barra de Proteína Avelã (cx 12un)', categoria: 'Barras', quantidade: 1, valorUnitario: 69.9, valorTotal: 69.9 }],
+    informacoesAdicionais: { utmSource: 'direto', device: 'desktop' },
   },
 };
 

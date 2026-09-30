@@ -1,10 +1,14 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth.js';
+import { AssistantWidget } from '../assistant/AssistantWidget.js';
 
 const LINKS = [
   { to: '/', label: 'Visão geral', end: true },
   { to: '/produtos', label: 'Produtos', end: false },
   { to: '/aquisicao', label: 'Aquisição', end: false },
+  { to: '/uso-do-app', label: 'Uso do app', end: false },
+  { to: '/qualidade', label: 'Qualidade', end: false },
+  { to: '/sprint', label: 'Sprint', end: false },
   { to: '/configuracoes', label: 'Configurações', end: false },
 ];
 
@@ -46,6 +50,7 @@ export function AppShell() {
       <main className="mx-auto max-w-7xl p-6">
         <Outlet />
       </main>
+      <AssistantWidget />
     </div>
   );
 }

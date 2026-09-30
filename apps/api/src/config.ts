@@ -13,6 +13,8 @@ const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
   UAPPI_BASE_URL: z.string().url(),
   GA4_CREDENTIALS_JSON: z.string().default(''),
+  // Property GA4/Firebase do app mobile. Cai para GA4_CREDENTIALS_JSON em mcp-firebase quando vazia.
+  GA4_APP_CREDENTIALS_JSON: z.string().default(''),
   // Piso de 10 min protege a cota da Uappi contra um typo na configuração.
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(10, 'SYNC_INTERVAL_MINUTES mínimo é 10').default(30),
   SYNC_BACKFILL_DAYS: z.coerce.number().int().min(1).max(730).default(90),
@@ -36,6 +38,7 @@ export interface AppConfig {
   anthropicApiKey: string;
   uappiBaseUrl: string;
   ga4CredentialsJson: string;
+  ga4AppCredentialsJson: string;
   syncIntervalMinutes: number;
   syncBackfillDays: number;
   mockExternalApis: boolean;
@@ -66,6 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv | Record<string, string | unde
     anthropicApiKey: e.ANTHROPIC_API_KEY,
     uappiBaseUrl: e.UAPPI_BASE_URL,
     ga4CredentialsJson: e.GA4_CREDENTIALS_JSON,
+    ga4AppCredentialsJson: e.GA4_APP_CREDENTIALS_JSON,
     syncIntervalMinutes: e.SYNC_INTERVAL_MINUTES,
     syncBackfillDays: e.SYNC_BACKFILL_DAYS,
     mockExternalApis: e.MOCK_EXTERNAL_APIS,

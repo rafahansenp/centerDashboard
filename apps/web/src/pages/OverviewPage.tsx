@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useFilters } from '../hooks/use-filters.js';
-import { useMetricBatch } from '../hooks/use-metric-series.js';
+import { useMetricBatch, useMetricSeries } from '../hooks/use-metric-series.js';
 import { useTool } from '../hooks/use-tool.js';
 import { PeriodPicker } from '../components/filters/PeriodPicker.js';
 import { SourceFilter } from '../components/filters/SourceFilter.js';
@@ -26,6 +26,9 @@ interface StatusGroups {
   groups: Array<{ group: string; label: string; orders: number; revenueCents: number; share: number }>;
 }
 
+interface FeedbackSummary { total: number }
+interface SprintSummaryView { byStatus: Array<{ key: string; count: number }> }
+
 const percent = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1 });
 
 export function OverviewPage({ today }: { today: string }) {
@@ -48,6 +51,21 @@ export function OverviewPage({ today }: { today: string }) {
   const statusQuery = useTool<StatusGroups>('commerce', 'orders_by_status', {
     from: filters.from, to: filters.to,
   }, { enabled: filters.sources.includes('commerce') });
+
+  // Pulso dos outros módulos (app, qualidade, sprint) — sempre visível aqui,
+  // independente do filtro de fonte acima (que é só sobre faturamento/sessões).
+  // Uma visão geral que só mostra loja+analytics não é geral.
+  const appUsersQuery = useMetricSeries({
+    metricId: 'firebase.active_users', from: filters.from, to: filters.to, granularity: filters.granularity,
+  });
+  const feedbackQuery = useTool<FeedbackSummary>('quality', 'feedback_by_category', {
+    from: filters.from, to: filters.to,
+  });
+  const sprintQuery = useTool<SprintSummaryView>('sprint', 'sprint_summary', {
+    from: filters.from, to: filters.to,
+  });
+  const deliveredTasks = sprintQuery.data?.byStatus.find((s) => s.key === 'ENTREGUE')?.count ?? 0;
+  const asError = (value: unknown) => (value instanceof Error ? value : null);
 
   const seriesById = new Map((data ?? []).map((series) => [series.metricId, series]));
   const pick = (ids: string[]): MetricSeries[] =>
@@ -137,6 +155,33 @@ export function OverviewPage({ today }: { today: string }) {
             </table>
           </div>
         )}
+      </section>
+
+      <section aria-label="Outros módulos">
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Outros módulos</h3>
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <KpiCard
+            label="Usuários ativos (app)"
+            unit="count"
+            value={appUsersQuery.data?.total ?? 0}
+            isLoading={appUsersQuery.isLoading}
+            error={asError(appUsersQuery.error)}
+          />
+          <KpiCard
+            label="Feedback recebido"
+            unit="count"
+            value={feedbackQuery.data?.total ?? 0}
+            isLoading={feedbackQuery.isLoading}
+            error={asError(feedbackQuery.error)}
+          />
+          <KpiCard
+            label="Tarefas entregues (sprint)"
+            unit="count"
+            value={deliveredTasks}
+            isLoading={sprintQuery.isLoading}
+            error={asError(sprintQuery.error)}
+          />
+        </div>
       </section>
     </div>
   );

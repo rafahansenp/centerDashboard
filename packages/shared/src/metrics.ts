@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TenantContextSchema } from './tenant.js';
 
-export const MetricSourceSchema = z.enum(['commerce', 'ga4', 'behavior']);
+export const MetricSourceSchema = z.enum(['commerce', 'ga4', 'behavior', 'firebase', 'quality', 'sprint']);
 export type MetricSource = z.infer<typeof MetricSourceSchema>;
 
 export const MetricUnitSchema = z.enum(['count', 'currency', 'ratio', 'duration']);

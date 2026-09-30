@@ -31,6 +31,9 @@ export const ALLOWED_TOOLS: Record<MetricSource, readonly string[]> = {
     'app_versions', 'top_events', 'compare_events', 'checkout_funnel',
   ],
   behavior: ['events_before_purchase', 'screen_abandon_impact'],
+  firebase: ['usage_summary', 'shop_funnel', 'compare_by_version'],
+  quality: ['rating_trend', 'feedback_by_category'],
+  sprint: ['sprint_summary', 'sprint_tasks', 'sprint_cycles', 'sprint_type_trend'],
 };
 
 /**

@@ -52,10 +52,10 @@ describe('resolvePreset', () => {
 });
 
 describe('useFilters', () => {
-  it('defaults to the last 30 days when the URL has no params', () => {
+  it('defaults to the last 90 days when the URL has no params', () => {
     const { result } = renderHook(() => useFilters(TODAY), { wrapper: wrapperFor('/') });
     expect(result.current.filters).toEqual({
-      from: '2026-02-14', to: TODAY, granularity: 'day', sources: ['commerce', 'ga4'],
+      from: '2025-12-16', to: TODAY, granularity: 'week', sources: ['commerce', 'ga4'],
     });
   });
 
@@ -70,7 +70,7 @@ describe('useFilters', () => {
 
   it('falls back to the default on an invalid granularity', () => {
     const { result } = renderHook(() => useFilters(TODAY), { wrapper: wrapperFor('/?granularity=hour') });
-    expect(result.current.filters.granularity).toBe('day');
+    expect(result.current.filters.granularity).toBe('week');
   });
 
   it('ignores an unknown source in the URL', () => {

@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { MAX_LOADED_MESSAGES, appendExchange, loadConversationHistory } from '../agent/memory.js';
+import { MAX_LOADED_MESSAGES, appendExchange, loadConversationHistory, loadUserConversationHistory } from '../agent/memory.js';
 
 function buildPrisma() {
   const conversation = {
@@ -51,6 +51,41 @@ describe('loadConversationHistory', () => {
     conversation.findFirst.mockResolvedValueOnce({ id: 'conv_1' } as never);
     await loadConversationHistory(prisma, 'wid_1', 'org_1');
     expect(message.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: MAX_LOADED_MESSAGES }));
+  });
+});
+
+describe('loadUserConversationHistory', () => {
+  it('creates a conversation keyed by userId, not whatsappIdentityId', async () => {
+    const { prisma, conversation } = buildPrisma();
+    expect(await loadUserConversationHistory(prisma, 'user_1', 'org_1'))
+      .toEqual({ conversationId: 'conv_new', history: [] });
+    expect(conversation.create).toHaveBeenCalledWith({
+      data: { userId: 'user_1', organizationId: 'org_1' },
+    });
+  });
+
+  it('reuses the conversation and returns history in chronological order', async () => {
+    const { prisma, conversation, message } = buildPrisma();
+    conversation.findFirst.mockResolvedValueOnce({ id: 'conv_1' } as never);
+    message.findMany.mockResolvedValueOnce([
+      { role: 'ASSISTANT', content: 'resposta 1' },
+      { role: 'USER', content: 'pergunta 1' },
+    ] as never);
+
+    const result = await loadUserConversationHistory(prisma, 'user_1', 'org_1');
+    expect(conversation.create).not.toHaveBeenCalled();
+    expect(result.history).toEqual([
+      { role: 'user', content: 'pergunta 1' },
+      { role: 'assistant', content: 'resposta 1' },
+    ]);
+  });
+
+  it('never filters by whatsappIdentityId', async () => {
+    const { prisma, conversation } = buildPrisma();
+    await loadUserConversationHistory(prisma, 'user_1', 'org_1');
+    expect(conversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user_1' },
+    }));
   });
 });
 

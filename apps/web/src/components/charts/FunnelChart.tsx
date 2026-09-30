@@ -66,7 +66,10 @@ export function FunnelChart({ title, result, isLoading = false, error = null }: 
                     <div
                       className="h-2 rounded-sm"
                       style={{
-                        width: `${Math.max(2, (step.users / firstUsers) * 100)}%`,
+                        // Limitado a 100%: o funil não é garantidamente monotônico
+                        // (mock, ver nota abaixo) — uma etapa com mais usuários que
+                        // a primeira estoura a barra do contêiner sem o teto.
+                        width: `${Math.min(100, Math.max(2, (step.users / firstUsers) * 100))}%`,
                         backgroundColor: SERIES_COLOR_SLOTS[0],
                       }}
                     />

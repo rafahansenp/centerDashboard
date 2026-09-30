@@ -41,6 +41,46 @@ export async function loadConversationHistory(
   };
 }
 
+/**
+ * Mesma forma de `loadConversationHistory`, mas pelo canal interno (chat
+ * autenticado no painel, sem WhatsApp) — a conversa é encontrada/criada por
+ * `userId` em vez de `whatsappIdentityId`. `appendExchange` é compartilhado
+ * entre os dois canais: ele só recebe `conversationId`, nunca soube de canal.
+ */
+export async function loadUserConversationHistory(
+  prisma: PrismaClient,
+  userId: string,
+  organizationId: string,
+): Promise<{ conversationId: string; history: AgentMessage[] }> {
+  const existing = await prisma.conversation.findFirst({
+    where: { userId },
+    orderBy: { lastMessageAt: 'desc' },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    const created = await prisma.conversation.create({
+      data: { userId, organizationId },
+    });
+    return { conversationId: created.id, history: [] };
+  }
+
+  const rows = await prisma.message.findMany({
+    where: { conversationId: existing.id },
+    orderBy: { createdAt: 'desc' },
+    take: MAX_LOADED_MESSAGES,
+    select: { role: true, content: true },
+  });
+
+  return {
+    conversationId: existing.id,
+    history: rows.reverse().map((row) => ({
+      role: row.role === 'USER' ? ('user' as const) : ('assistant' as const),
+      content: row.content,
+    })),
+  };
+}
+
 export interface AppendExchangeParams {
   conversationId: string;
   organizationId: string;

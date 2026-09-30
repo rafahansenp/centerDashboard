@@ -67,6 +67,10 @@ export interface CorrelationResult {
   caveat: string;
 }
 
+export interface AgentMessageView { role: 'user' | 'assistant'; content: string }
+export interface AgentConversationView { conversationId: string; messages: AgentMessageView[] }
+export interface AgentAskResult { conversationId: string; reply: string }
+
 export interface IntegrationsView {
   uappi: { configured: boolean };
   ga4: { propertyId: string | null; bigQueryDataset: string | null };
@@ -154,6 +158,14 @@ export const apiClient = {
     return request<Record<string, unknown>>('/api/analysis/app-version-impact', {
       method: 'POST', body: JSON.stringify(input),
     });
+  },
+
+  getAgentConversation(): Promise<AgentConversationView> {
+    return request('/api/agent/conversation');
+  },
+
+  askAgent(message: string): Promise<AgentAskResult> {
+    return request('/api/agent/ask', { method: 'POST', body: JSON.stringify({ message }) });
   },
 
   getIntegrations(): Promise<IntegrationsView> {

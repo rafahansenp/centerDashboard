@@ -11,6 +11,11 @@ import {
   DEMO_UAPPI_SECRET_KEY,
   DEMO_GA4_PROPERTY_ID,
   DEMO_GA4_BIGQUERY_DATASET,
+  DEMO_GA4_APP_PROPERTY_ID,
+  DEMO_PLAY_CONSOLE_CREDS_JSON,
+  DEMO_APP_STORE_CONNECT_KEY_JSON,
+  DEMO_MONDAY_API_TOKEN,
+  DEMO_MONDAY_BOARD_ID,
   TOUCH_LEAD_MINUTES,
   type OrgIntegrationColumns,
   type OrderForTouch,
@@ -56,6 +61,8 @@ describe('shouldSetField', () => {
 describe('planIntegrationWrite', () => {
   const empty: OrgIntegrationColumns = {
     uappiApiKey: null, uappiSecretKey: null, ga4PropertyId: null, ga4BigQueryDataset: null,
+    ga4AppPropertyId: null, playConsoleCredsJson: null, appStoreConnectKeyJson: null,
+    mondayApiToken: null, mondayBoardId: null,
   };
 
   it('plans to write every field on a fresh organization', () => {
@@ -67,9 +74,17 @@ describe('planIntegrationWrite', () => {
       uappiSecretKey: `encrypted(${DEMO_UAPPI_SECRET_KEY})`,
       ga4PropertyId: DEMO_GA4_PROPERTY_ID,
       ga4BigQueryDataset: DEMO_GA4_BIGQUERY_DATASET,
+      ga4AppPropertyId: DEMO_GA4_APP_PROPERTY_ID,
+      playConsoleCredsJson: `encrypted(${DEMO_PLAY_CONSOLE_CREDS_JSON})`,
+      appStoreConnectKeyJson: `encrypted(${DEMO_APP_STORE_CONNECT_KEY_JSON})`,
+      mondayApiToken: `encrypted(${DEMO_MONDAY_API_TOKEN})`,
+      mondayBoardId: DEMO_MONDAY_BOARD_ID,
     });
     expect(encrypt).toHaveBeenCalledWith(DEMO_UAPPI_API_KEY);
     expect(encrypt).toHaveBeenCalledWith(DEMO_UAPPI_SECRET_KEY);
+    expect(encrypt).toHaveBeenCalledWith(DEMO_PLAY_CONSOLE_CREDS_JSON);
+    expect(encrypt).toHaveBeenCalledWith(DEMO_APP_STORE_CONNECT_KEY_JSON);
+    expect(encrypt).toHaveBeenCalledWith(DEMO_MONDAY_API_TOKEN);
   });
 
   it('never overwrites existing Uappi credentials — the core safety guarantee', () => {
@@ -81,7 +96,8 @@ describe('planIntegrationWrite', () => {
 
     expect(plan.data).not.toHaveProperty('uappiApiKey');
     expect(plan.data).not.toHaveProperty('uappiSecretKey');
-    expect(encrypt).not.toHaveBeenCalled();
+    expect(encrypt).not.toHaveBeenCalledWith(DEMO_UAPPI_API_KEY);
+    expect(encrypt).not.toHaveBeenCalledWith(DEMO_UAPPI_SECRET_KEY);
     expect(plan.notes.some((n) => /já configuradas/.test(n))).toBe(true);
   });
 
@@ -101,10 +117,13 @@ describe('planIntegrationWrite', () => {
     const org: OrgIntegrationColumns = {
       uappiApiKey: 'v1.a.b.c', uappiSecretKey: 'v1.d.e.f',
       ga4PropertyId: 'real-property-123', ga4BigQueryDataset: 'real_dataset',
+      ga4AppPropertyId: 'real-app-property-123',
+      playConsoleCredsJson: 'v1.real.real.real', appStoreConnectKeyJson: 'v1.real.real.real',
+      mondayApiToken: 'v1.real.real.real', mondayBoardId: 'real-board-123',
     };
     const plan = planIntegrationWrite(org, (v) => v);
     expect(plan.data).toEqual({});
-    expect(plan.notes).toHaveLength(3);
+    expect(plan.notes).toHaveLength(8);
   });
 });
 

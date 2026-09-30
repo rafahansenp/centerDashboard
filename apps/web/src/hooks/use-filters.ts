@@ -58,7 +58,7 @@ export function useFilters(today: string = new Date().toLocaleDateString('en-CA'
   const [searchParams, setSearchParams] = useSearchParams();
 
   const filters = useMemo<DashboardFilters>(() => {
-    const fallback = resolvePreset('last30', today);
+    const fallback = resolvePreset('last90', today);
 
     const from = searchParams.get('from');
     const to = searchParams.get('to');

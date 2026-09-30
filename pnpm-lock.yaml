@@ -207,6 +207,21 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/mcp-firebase:
+    dependencies:
+      '@center/mcp-core':
+        specifier: workspace:*
+        version: link:../mcp-core
+      '@center/mcp-ga4':
+        specifier: workspace:*
+        version: link:../mcp-ga4
+      '@center/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
   packages/mcp-ga4:
     dependencies:
       '@center/mcp-core':
@@ -221,6 +236,44 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+
+  packages/mcp-quality:
+    dependencies:
+      '@center/mcp-core':
+        specifier: workspace:*
+        version: link:../mcp-core
+      '@center/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@prisma/client':
+        specifier: ^6.1.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
+
+  packages/mcp-sprint:
+    dependencies:
+      '@center/mcp-core':
+        specifier: workspace:*
+        version: link:../mcp-core
+      '@center/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@prisma/client':
+        specifier: ^6.1.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
 
   packages/pii: {}
 

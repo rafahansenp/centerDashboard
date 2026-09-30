@@ -12,7 +12,7 @@ export async function resolveTenant(
 ): Promise<TenantContext> {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, ga4PropertyId: true, ga4BigQueryDataset: true },
+    select: { id: true, ga4PropertyId: true, ga4BigQueryDataset: true, ga4AppPropertyId: true },
   });
   if (!organization) throw new Error(`organização não encontrada: ${organizationId}`);
 
@@ -28,6 +28,7 @@ export async function resolveTenant(
   const externalIds: Record<string, string> = {};
   if (organization.ga4PropertyId) externalIds.ga4PropertyId = organization.ga4PropertyId;
   if (organization.ga4BigQueryDataset) externalIds.ga4BigQueryDataset = organization.ga4BigQueryDataset;
+  if (organization.ga4AppPropertyId) externalIds.ga4AppPropertyId = organization.ga4AppPropertyId;
 
   return { organizationId: organization.id, externalIds };
 }
