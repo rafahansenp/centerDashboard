@@ -11,7 +11,7 @@ function Bubble({ message }: { message: AgentMessageView }) {
       <div
         className="max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
         style={isUser
-          ? { backgroundColor: 'var(--viz-1)', color: '#fff' }
+          ? { backgroundColor: 'var(--accent)', color: '#fff' }
           : { backgroundColor: 'var(--surface-1)', border: '1px solid var(--hairline)', color: 'var(--text-primary)' }}
       >
         {message.content}
@@ -98,7 +98,7 @@ export function AssistantChat() {
         <button
           type="submit"
           disabled={ask.isPending || draft.trim() === ''}
-          className="rounded-md bg-viz-1 px-4 py-2 text-sm text-white disabled:opacity-60"
+          className="rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-60"
         >
           Enviar
         </button>

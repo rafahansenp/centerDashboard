@@ -7,6 +7,7 @@ export default {
     extend: {
       colors: {
         viz: { 1: 'var(--viz-1)', 2: 'var(--viz-2)', 3: 'var(--viz-3)', 4: 'var(--viz-4)' },
+        accent: 'var(--accent)',
       },
     },
   },

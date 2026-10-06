@@ -30,7 +30,7 @@ export function PeriodPicker({ today }: { today: string }) {
               aria-pressed={active}
               onClick={() => applyPreset(preset.id)}
               className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                active ? 'bg-viz-1 text-white' : 'hover:bg-black/5 dark:hover:bg-white/10'
+                active ? 'bg-accent text-white' : 'hover:bg-white/10'
               }`}
               style={active ? undefined : { color: 'var(--text-secondary)' }}
             >
