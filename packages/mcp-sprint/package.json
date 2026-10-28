@@ -1,0 +1,23 @@
+{
+  "name": "@center/mcp-sprint",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest --runInBand",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@center/mcp-core": "workspace:*",
+    "@center/shared": "workspace:*",
+    "@prisma/client": "^6.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1"
+  }
+}

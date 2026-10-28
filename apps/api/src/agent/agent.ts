@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, stepCountIs, type LanguageModel, type ModelMessage } from 'ai';
 import type { MetricGateway } from '@center/mcp-core';
 import type { TenantContext } from '@center/shared';
@@ -34,7 +35,16 @@ export interface AgentResult {
   toolCalls: AgentToolCall[];
 }
 
+/**
+ * Com `LLM_BASE_URL` definida (ex.: Ollama em http://localhost:11434/v1), o
+ * agente fala com esse servidor OpenAI-compatível e nenhum dado sai da rede.
+ */
 export function defaultModel(apiKey: string): LanguageModel {
+  const baseURL = process.env.LLM_BASE_URL;
+  if (baseURL) {
+    const local = createOpenAICompatible({ name: 'local', baseURL });
+    return local(process.env.LLM_MODEL ?? 'qwen3:8b');
+  }
   return createAnthropic({ apiKey })('claude-sonnet-5');
 }
 

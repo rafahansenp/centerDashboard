@@ -75,7 +75,7 @@ export function IntegrationCredentialsForm() {
             value={uappiApiKey} onChange={(event) => setUappiApiKey(event.target.value)}
             placeholder={data?.uappi.configured ? '••••••••' : 'apiKey'}
             className="w-full rounded-md border px-3 py-2"
-            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)' }}
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)', color: 'var(--text-primary)' }}
           />
         </div>
 
@@ -88,7 +88,7 @@ export function IntegrationCredentialsForm() {
             value={uappiSecretKey} onChange={(event) => setUappiSecretKey(event.target.value)}
             placeholder={data?.uappi.configured ? '••••••••' : 'secretKey'}
             className="w-full rounded-md border px-3 py-2"
-            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)' }}
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)', color: 'var(--text-primary)' }}
           />
         </div>
       </div>
@@ -104,7 +104,7 @@ export function IntegrationCredentialsForm() {
             id="ga4PropertyId" name="ga4PropertyId" type="text"
             value={ga4PropertyId} onChange={(event) => setGa4PropertyId(event.target.value)}
             className="w-full rounded-md border px-3 py-2"
-            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)' }}
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)', color: 'var(--text-primary)' }}
           />
         </div>
 
@@ -117,7 +117,7 @@ export function IntegrationCredentialsForm() {
             value={ga4BigQueryDataset} onChange={(event) => setGa4BigQueryDataset(event.target.value)}
             placeholder="analytics_123456789"
             className="w-full rounded-md border px-3 py-2"
-            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)' }}
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)', color: 'var(--text-primary)' }}
           />
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Necessário só para as duas perguntas de comportamento avançado (Fase 8).</p>
         </div>
@@ -131,7 +131,7 @@ export function IntegrationCredentialsForm() {
 
       <button
         type="submit" disabled={mutation.isPending}
-        className="rounded-md bg-viz-1 px-4 py-2 text-white disabled:opacity-60"
+        className="rounded-md bg-accent px-4 py-2 text-white disabled:opacity-60"
       >
         {mutation.isPending ? 'Salvando…' : 'Salvar'}
       </button>

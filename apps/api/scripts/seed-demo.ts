@@ -9,6 +9,10 @@ import {
   assertMockMode,
   planIntegrationWrite,
   buildAttributionTouchData,
+  buildAppStoreSnapshots,
+  buildAppFeedback,
+  buildSprintCycles,
+  buildSprintTasks,
   formatCents,
   formatDateOnly,
   type OrderForTouch,
@@ -107,10 +111,50 @@ async function main(): Promise<number> {
       }
     }
 
-    // 4. Resumo — inclusive a descoberta que este script existe para
+    // 4. Nota da loja e feedback (Qualidade): sem chave natural em nenhuma das
+    //    duas tabelas, então a idempotência aqui é grossa — só popula se a
+    //    organização ainda não tiver nenhuma linha de cada tipo. Datas
+    //    relativas a `now`, não a julho/2026 (ver comentário em lib/seed-demo.ts).
+    const now = new Date();
+    const [existingSnapshots, existingFeedback] = await Promise.all([
+      prisma.appStoreSnapshot.count({ where: { organizationId: org.id } }),
+      prisma.appFeedback.count({ where: { organizationId: org.id } }),
+    ]);
+
+    if (existingSnapshots === 0) {
+      await prisma.appStoreSnapshot.createMany({ data: buildAppStoreSnapshots(org.id, now) });
+    }
+    if (existingFeedback === 0) {
+      await prisma.appFeedback.createMany({ data: buildAppFeedback(org.id, now) });
+    }
+
+    // 5. Sprint (Monday.com): `SprintCycle.sprintNumber` e `SprintTask.externalId`
+    //    são chaves naturais — upsert de verdade, roda quantas vezes for
+    //    preciso sem duplicar nada. Os ciclos vêm primeiro: as tarefas são
+    //    derivadas deles (mesmo sprintNumber, mesma janela de datas).
+    const sprintCycles = buildSprintCycles(org.id, now);
+    for (const cycle of sprintCycles) {
+      await prisma.sprintCycle.upsert({
+        where: { organizationId_sprintNumber: { organizationId: org.id, sprintNumber: cycle.sprintNumber } },
+        create: cycle,
+        update: cycle,
+      });
+    }
+    for (const task of buildSprintTasks(org.id, sprintCycles)) {
+      await prisma.sprintTask.upsert({
+        where: { organizationId_externalId: { organizationId: org.id, externalId: task.externalId } },
+        create: task,
+        update: task,
+      });
+    }
+
+    // 6. Resumo — inclusive a descoberta que este script existe para
     //    resolver (docs/rodar-local.md, achado do brief): qual período
     //    escolher no painel para ver os dados.
-    const [orderCount, itemCount, customerCount, touchCount, revenue, range] = await Promise.all([
+    const [
+      orderCount, itemCount, customerCount, touchCount, revenue, range,
+      snapshotCount, feedbackCount, sprintTaskCount, sprintCycleCount,
+    ] = await Promise.all([
       prisma.commerceOrder.count({ where: { organizationId: org.id } }),
       prisma.commerceOrderItem.count({ where: { organizationId: org.id } }),
       prisma.commerceCustomer.count({ where: { organizationId: org.id } }),
@@ -121,6 +165,10 @@ async function main(): Promise<number> {
         _min: { emittedAt: true },
         _max: { emittedAt: true },
       }),
+      prisma.appStoreSnapshot.count({ where: { organizationId: org.id } }),
+      prisma.appFeedback.count({ where: { organizationId: org.id } }),
+      prisma.sprintTask.count({ where: { organizationId: org.id } }),
+      prisma.sprintCycle.count({ where: { organizationId: org.id } }),
     ]);
 
     console.log('');
@@ -133,6 +181,10 @@ async function main(): Promise<number> {
     console.log(`  clientes: ${customerCount}`);
     console.log(`  toques de atribuição: ${touchCount} (${touchesCreated} criados nesta rodada)`);
     console.log(`  faturamento total (todos os status): R$ ${formatCents(revenue._sum.totalCents ?? 0)}`);
+    console.log(`  snapshots de nota da loja: ${snapshotCount}`);
+    console.log(`  feedback categorizado: ${feedbackCount}`);
+    console.log(`  tarefas de sprint: ${sprintTaskCount}`);
+    console.log(`  sprints (relatório): ${sprintCycleCount}`);
 
     if (range._min.emittedAt && range._max.emittedAt) {
       const from = formatDateOnly(range._min.emittedAt);

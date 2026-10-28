@@ -38,6 +38,14 @@ model Organization {
   uappiSecretKey    String?
   ga4PropertyId     String?
   ga4BigQueryDataset String?
+  /// Property GA4/Firebase do app mobile (separada da propriedade web em ga4PropertyId).
+  ga4AppPropertyId  String?
+  /// Credenciais criptografadas (SecretBox) — nunca lidas fora da camada de sync.
+  playConsoleCredsJson   String?
+  appStoreConnectKeyJson String?
+  mondayApiToken         String?
+  /// Identificador público, como ga4PropertyId — não é segredo.
+  mondayBoardId          String?
   /// Sobrescreve o mapa padrão de status da Uappi: { "<idStatus>": "PAID", ... }
   statusMapping     Json?
   createdAt         DateTime @default(now())
@@ -51,6 +59,10 @@ model Organization {
   customers          CommerceCustomer[]
   attributionTouches AttributionTouch[]
   syncStates         SyncState[]
+  storeSnapshots     AppStoreSnapshot[]
+  feedback           AppFeedback[]
+  sprintTasks        SprintTask[]
+  sprintCycles       SprintCycle[]
 }
 
 model User {
@@ -65,6 +77,7 @@ model User {
   organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   whatsappIdentity WhatsAppIdentity?
   linkCodes        LinkCode[]
+  conversations    Conversation[]
 
   @@index([organizationId])
 }
@@ -96,18 +109,25 @@ model LinkCode {
   @@index([userId])
 }
 
+/// Uma conversa com o agente, por um dos dois canais — exatamente um dos
+/// dois campos abaixo é preenchido, nunca os dois nem nenhum:
+/// `whatsappIdentityId` (bot no WhatsApp) ou `userId` (chat interno,
+/// autenticado, dentro do próprio painel — T-chat-interno).
 model Conversation {
   id                 String   @id @default(cuid())
   organizationId     String
-  whatsappIdentityId String
+  whatsappIdentityId String?
+  userId             String?
   lastMessageAt      DateTime @default(now())
   createdAt          DateTime @default(now())
 
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  whatsappIdentity WhatsAppIdentity @relation(fields: [whatsappIdentityId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  whatsappIdentity WhatsAppIdentity? @relation(fields: [whatsappIdentityId], references: [id], onDelete: Cascade)
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages         Message[]
 
   @@index([whatsappIdentityId, lastMessageAt])
+  @@index([userId, lastMessageAt])
 }
 
 model Message {
@@ -270,4 +290,146 @@ model SyncState {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, resource])
+}
+
+// ─────────────────────── READ MODEL DE QUALIDADE (APP MOBILE) ───────────────────────
+// Alimentado pelo sync da Play Console / App Store Connect (T5B/T17B/T36B: mock por enquanto).
+
+enum StorePlatform {
+  ANDROID
+  IOS
+}
+
+/// Uma linha por (organização, plataforma, dia). Tendência e "nota atual" saem
+/// de ordenar por capturedAt — nunca uma tabela "latest" separada.
+model AppStoreSnapshot {
+  id             String        @id @default(cuid())
+  organizationId String
+  platform       StorePlatform
+  capturedAt     DateTime
+  averageRating  Float
+  ratingCount    Int
+  appVersion     String?
+  /// Payload cru da API da loja, para reprocessar sem chamar de novo.
+  rawPayload     Json
+  syncedAt       DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, platform, capturedAt])
+}
+
+enum FeedbackOrigin {
+  STORE_ANDROID
+  STORE_IOS
+  MARKETPLACE
+}
+
+enum FeedbackCategory {
+  CRITICA
+  ERRO
+  SUGESTAO
+  ELOGIO
+  OUTRO
+}
+
+/// Feedback categorizado vindo do console da loja (reviews) e do painel de
+/// marketplace da Uappi. % por categoria é sempre um groupBy, nunca pré-agregado.
+model AppFeedback {
+  id             String           @id @default(cuid())
+  organizationId String
+  origin         FeedbackOrigin
+  category       FeedbackCategory
+  /// 1-5. Nulo para feedback de marketplace sem nota.
+  rating         Int?
+  occurredAt     DateTime
+  rawPayload     Json
+  syncedAt       DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, category, occurredAt])
+  @@index([organizationId, origin, occurredAt])
+}
+
+// ─────────────────────────── READ MODEL DE SPRINT (MONDAY.COM) ───────────────────────────
+
+enum SprintTaskArea {
+  FRONT
+  BACK
+}
+
+enum SprintTaskType {
+  MELHORIA
+  CORRECAO
+  BUGFIX
+  MODULO
+}
+
+enum SprintTaskStatus {
+  PLANEJADO
+  ADICIONAL
+  ENTREGUE
+}
+
+enum BugfixEnvironment {
+  TESTE
+  PRODUCAO
+}
+
+/// Uma linha por item do Monday.com. Os totais por área/tipo/status saem de
+/// groupBy — nunca pré-agregados. `sprintNumber` é sequencial (77, 78, 79…),
+/// espelhando a numeração real das sprints no board do Monday.
+model SprintTask {
+  id                String             @id @default(cuid())
+  organizationId    String
+  /// Id do item na board do Monday.com.
+  externalId        String
+  title             String
+  area              SprintTaskArea
+  type              SprintTaskType
+  status            SprintTaskStatus
+  sprintNumber      Int?
+  /// Só preenchido quando type = BUGFIX.
+  bugfixEnvironment BugfixEnvironment?
+  createdAt         DateTime
+  deliveredAt       DateTime?
+  rawPayload        Json
+  syncedAt          DateTime           @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, sprintNumber, status])
+  @@index([organizationId, createdAt])
+}
+
+/// Resumo por sprint (um "sprint report" do Monday.com), uma linha por
+/// (organização, número da sprint). "Vieram/vão para a próxima sprint" é
+/// estado que só o board sabe — não dá pra derivar de SprintTask sem rastrear
+/// para onde cada tarefa migrou, então mora aqui como campo de fato, não
+/// calculado. O detalhe de tarefas de correção continua vindo de SprintTask
+/// (type = CORRECAO, mesmo sprintNumber) — nunca duplicado aqui.
+model SprintCycle {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  sprintNumber        Int
+  totalTasks          Int
+  planned             Int
+  carriedFromPrevious Int
+  additionalTasks     Int
+  completed           Int
+  carriedToNext       Int
+  bugfixTest          Int
+  bugfixProduction    Int
+  startDate           DateTime?
+  endDate             DateTime?
+  rawPayload          Json
+  syncedAt            DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sprintNumber])
+  @@index([organizationId, sprintNumber])
 }

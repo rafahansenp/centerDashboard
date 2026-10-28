@@ -44,6 +44,24 @@ const mcpServers: McpServerConfig[] = [
     args: ['../../packages/mcp-behavior/dist/main.js'],
     env: { GA4_CREDENTIALS_JSON: config.ga4CredentialsJson, MOCK_EXTERNAL_APIS: String(config.mockExternalApis) },
   },
+  {
+    source: 'firebase',
+    command: process.execPath,
+    args: ['../../packages/mcp-firebase/dist/main.js'],
+    env: { GA4_APP_CREDENTIALS_JSON: config.ga4AppCredentialsJson, MOCK_EXTERNAL_APIS: String(config.mockExternalApis) },
+  },
+  {
+    source: 'quality',
+    command: process.execPath,
+    args: ['../../packages/mcp-quality/dist/main.js'],
+    env: { DATABASE_URL: config.databaseUrl },
+  },
+  {
+    source: 'sprint',
+    command: process.execPath,
+    args: ['../../packages/mcp-sprint/dist/main.js'],
+    env: { DATABASE_URL: config.databaseUrl },
+  },
 ];
 
 const pool = await McpPool.spawn(mcpServers);

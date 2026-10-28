@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/openai-compatible": "^1.0.0",
     "@center/mcp-core": "workspace:*",
     "@center/pii": "workspace:*",
     "@center/secrets": "workspace:^",

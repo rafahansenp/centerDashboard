@@ -56,7 +56,10 @@ function post(app: Awaited<ReturnType<typeof buildServer>>, payload: unknown, se
   });
 }
 
-describe('GET /webhooks/whatsapp', () => {
+// Pausado junto com `registerWhatsAppRoutes` em ../server.ts (2026-09-30) —
+// a rota não está registrada, então estes testes falham por design (404 em
+// vez de 200/401). Reative removendo `.skip` quando a rota voltar.
+describe.skip('GET /webhooks/whatsapp', () => {
   it('echoes the challenge when the verify token matches', async () => {
     const { app } = await setup();
     const response = await app.inject({
@@ -89,7 +92,7 @@ describe('GET /webhooks/whatsapp', () => {
   });
 });
 
-describe('POST /webhooks/whatsapp', () => {
+describe.skip('POST /webhooks/whatsapp', () => {
   it('enqueues a valid message and answers 200 immediately', async () => {
     const { app, enqueue } = await setup();
     expect((await post(app, inboundPayload)).statusCode).toBe(200);
@@ -169,7 +172,7 @@ describe('POST /webhooks/whatsapp', () => {
   });
 });
 
-describe('rate limiting on /webhooks/whatsapp', () => {
+describe.skip('rate limiting on /webhooks/whatsapp', () => {
   it('never 429s the webhook, even under a flood of unsigned requests spoofing a real Meta delivery IP', async () => {
     const { app } = await setup();
     // 31.13.115.1 é um IP de entrega real e publicado da Meta — o cenário do

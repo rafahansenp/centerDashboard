@@ -3,36 +3,21 @@
 @tailwind utilities;
 
 /*
- * Paleta categórica validada (light e dark, pairlist adjacente).
+ * Paleta categórica validada (pairlist adjacente, tunada para fundo escuro).
  * A ORDEM DOS SLOTS É O MECANISMO DE SEGURANÇA PARA DALTONISMO — não reordene
  * nem troque um hex sem revalidar a paleta inteira.
+ *
+ * Tema único, escuro, seguindo a identidade visual do app (fundo quase preto,
+ * azul de marca como destaque) — não há alternância claro/escuro no painel.
  */
 :root {
-  color-scheme: light;
-  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-4: #eda100;
-  --surface-1: #fcfcfb; --page-plane: #f9f9f7;
-  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
-  --gridline: #e1e0d9; --hairline: rgba(11, 11, 11, 0.1);
-  --good: #006300; --critical: #d03b3b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme='light'])) {
-    color-scheme: dark;
-    --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500;
-    --surface-1: #1a1a19; --page-plane: #0d0d0d;
-    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
-    --gridline: #2c2c2a; --hairline: rgba(255, 255, 255, 0.1);
-    --good: #0ca30c; --critical: #d03b3b;
-  }
-}
-
-:root[data-theme='dark'] {
   color-scheme: dark;
   --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500;
-  --surface-1: #1a1a19; --page-plane: #0d0d0d;
-  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
-  --gridline: #2c2c2a; --hairline: rgba(255, 255, 255, 0.1);
+  --viz-5: #1596a3; --viz-6: #9a6ee8; --viz-7: #e14f95;
+  --accent: #009ee0; --accent-foreground: #ffffff;
+  --surface-1: #1b1f27; --page-plane: #12151a;
+  --text-primary: #f5f6fa; --text-secondary: #aeb4c2; --text-muted: #7d8495;
+  --gridline: #2a2f3a; --hairline: rgba(255, 255, 255, 0.08);
   --good: #0ca30c; --critical: #d03b3b;
 }
 

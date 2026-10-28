@@ -127,8 +127,8 @@ Um comando cobre as três integrações mockadas: configura a organização
 os pedidos pelo pipeline real. Ao final ele imprime as contagens e **o período
 que você deve escolher no painel**.
 
-Esperado: 15 pedidos, 20 itens, 14 clientes, R$ 3.947,10, de 2026-07-01 a
-2026-07-20.
+Esperado: 25 pedidos, 35 itens, 22 clientes, R$ 5.254,40, de 2026-07-01 a
+2026-07-29.
 
 ⚠️ Recusa se `MOCK_EXTERNAL_APIS` não for `"true"`, e nunca sobrescreve
 credencial já configurada. Pode rodar duas vezes sem duplicar nada.

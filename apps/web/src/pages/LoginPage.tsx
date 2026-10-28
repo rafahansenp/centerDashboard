@@ -31,7 +31,7 @@ export function LoginPage() {
           <input id="email" type="email" value={email} autoComplete="username"
             onChange={(event) => setEmail(event.target.value)}
             className="w-full rounded-md border px-3 py-2"
-            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)' }} />
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)', color: 'var(--text-primary)' }} />
         </div>
 
         <div className="space-y-1">
@@ -39,7 +39,7 @@ export function LoginPage() {
           <input id="password" type="password" value={password} autoComplete="current-password"
             onChange={(event) => setPassword(event.target.value)}
             className="w-full rounded-md border px-3 py-2"
-            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)' }} />
+            style={{ borderColor: 'var(--hairline)', backgroundColor: 'var(--page-plane)', color: 'var(--text-primary)' }} />
         </div>
 
         {loginError ? (
@@ -47,7 +47,7 @@ export function LoginPage() {
         ) : null}
 
         <button type="submit" disabled={isLoggingIn}
-          className="w-full rounded-md bg-viz-1 px-3 py-2 text-white disabled:opacity-60">
+          className="w-full rounded-md bg-accent px-3 py-2 text-white disabled:opacity-60">
           {isLoggingIn ? 'Entrando…' : 'Entrar'}
         </button>
       </form>

@@ -6,7 +6,7 @@ import { renderWithProviders } from '../test/render.js';
 import { OverviewPage } from '../pages/OverviewPage.js';
 
 function seriesFor(metricId: string, total: number) {
-  const source = metricId.startsWith('commerce') ? 'commerce' : 'ga4';
+  const source = metricId.startsWith('commerce') ? 'commerce' : metricId.startsWith('firebase') ? 'firebase' : 'ga4';
   const unit = metricId === 'commerce.revenue' || metricId === 'commerce.average_ticket' ? 'currency' : 'count';
   return {
     metricId, source, unit, granularity: 'day', total,
@@ -30,6 +30,15 @@ function mockEndpoints(batchHandler?: jest.Mock) {
         { group: 'CANCELLED', label: 'Cancelado', orders: 6, revenueCents: 60000, share: 0.12 },
         { group: 'PENDING_PAYMENT', label: 'Aguardando pagamento', orders: 4, revenueCents: 20000, share: 0.08 },
       ],
+    })),
+    // Pulso dos outros módulos (seção "Outros módulos") — ver OverviewPage.tsx.
+    http.post('/api/metrics/query', () => HttpResponse.json(seriesFor('firebase.active_users', 58))),
+    http.post('/api/tools/quality/feedback_by_category', () => HttpResponse.json({
+      dimension: 'category', from: '2026-03-01', to: '2026-03-15', unit: 'count', total: 12, rows: [],
+    })),
+    http.post('/api/tools/sprint/sprint_summary', () => HttpResponse.json({
+      from: '2026-03-01', to: '2026-03-15', sprintNumber: null, total: 9,
+      byStatus: [{ key: 'ENTREGUE', label: 'Entregue', count: 9 }], byType: [], byArea: [],
     })),
   );
 }
@@ -84,6 +93,13 @@ describe('OverviewPage', () => {
     mswServer.use(
       http.post('/api/metrics/batch', () => HttpResponse.json({ message: 'fontes indisponíveis' }, { status: 502 })),
       http.post('/api/tools/commerce/orders_by_status', () => HttpResponse.json({ groups: [] })),
+      http.post('/api/metrics/query', () => HttpResponse.json(seriesFor('firebase.active_users', 0))),
+      http.post('/api/tools/quality/feedback_by_category', () => HttpResponse.json({
+        dimension: 'category', from: '2026-03-01', to: '2026-03-15', unit: 'count', total: 0, rows: [],
+      })),
+      http.post('/api/tools/sprint/sprint_summary', () => HttpResponse.json({
+        from: '2026-03-01', to: '2026-03-15', sprintNumber: null, total: 0, byStatus: [], byType: [], byArea: [],
+      })),
     );
     renderWithProviders(<OverviewPage today="2026-03-15" />, { route: '/' });
     await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
