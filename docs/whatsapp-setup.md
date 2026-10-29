@@ -1,5 +1,13 @@
 # Configuração do WhatsApp Cloud API
 
+> **Fora do MVP (decisão de 2026-10-29).** O canal de WhatsApp foi adiado até
+> que os detalhes do canal e os custos dos agentes sejam definidos. O código
+> fica desligado e as tabelas `WhatsAppIdentity`, `LinkCode` e
+> `ProcessedWebhookEvent` permanecem no schema sem uso. Quando voltar, a
+> proposta é ser um canal do módulo Assistente de IA, com um número único da
+> Blan e as mesmas permissões de módulo do painel. Este guia fica como
+> referência.
+
 ## Pré-requisitos (comece cedo — a verificação da Meta leva de 3 dias a 3 semanas)
 
 1. Conta no Meta Business Manager com o negócio **verificado**.

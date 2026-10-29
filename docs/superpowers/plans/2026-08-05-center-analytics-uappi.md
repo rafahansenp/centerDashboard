@@ -1,5 +1,7 @@
 # Center Analytics (Uappi + GA4 + WhatsApp) — Plano de Implementação
 
+> **Superado em parte (2026-10-29):** este plano assume uma organização com a Uappi embutida e o WhatsApp como canal principal. A arquitetura passou a ser multi-tenant, modular, com back-office e conectores, e o WhatsApp saiu do MVP. Ver `docs/superpowers/specs/2026-10-29-multi-tenant-modular-design.md`. O plano continua valendo como histórico do que foi construído.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Este documento substitui integralmente** `2026-08-04-center-dashboard-ia.md`. A mudança não é cosmética: a leitura da documentação da Uappi mostrou que os dados de e-commerce **não podem ser consultados ao vivo** (limite de 100 pedidos por página e 120 requisições por minuto), então a arquitetura passa a ter uma camada de ingestão para Postgres. Não reaproveite tarefas do documento anterior sem ler as notas de mudança na seção "O que mudou e por quê".

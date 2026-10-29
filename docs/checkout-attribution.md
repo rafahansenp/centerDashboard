@@ -1,5 +1,13 @@
 # Integração de atribuição no checkout
 
+> **Multi-tenant (alvo aprovado em 2026-10-29).** Cada cliente tem o próprio
+> `organizationId`; o back-office mostra o snippet pronto com o valor certo.
+> `POST /public/attribution` só aceita clientes ativos. Os passos 2 e 3 abaixo
+> são **específicos da Uappi** (`informacoesAdicionais`): cada conector de
+> e-commerce documenta como os campos de atribuição chegam ao pedido na sua
+> plataforma. Ver
+> [design](superpowers/specs/2026-10-29-multi-tenant-modular-design.md), §10.2.
+
 Esta é a única mudança necessária no site da loja. Ela é o que permite responder
 "qual campanha trouxe mais receita" com número exato, em vez de estimativa.
 

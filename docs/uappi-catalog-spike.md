@@ -1,5 +1,11 @@
 # Spike — catálogo e estoque na Uappi
 
+> **Nota (2026-10-29):** na arquitetura nova a Uappi vira o primeiro
+> **conector** de e-commerce (`packages/connectors`). Catálogo e estoque, se
+> entrarem, entram como *streams* do conector gravando no modelo canônico, não
+> como código específico da Uappi fora dele. Ver
+> [design](superpowers/specs/2026-10-29-multi-tenant-modular-design.md), §8.
+
 **Data:** 2026-08-06
 **Executado por:** Execução automatizada (subagent-driven development) — Claude, sessão `feat/center-analytics`
 

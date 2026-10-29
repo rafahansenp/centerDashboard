@@ -1,3 +1,22 @@
+# Center Dashboard
+
+SaaS de analytics para lojas virtuais da Blan: vendas do e-commerce, GA4, uso do
+app, qualidade nas lojas de apps e sprint da equipe de desenvolvimento num
+painel, com um assistente de IA que responde perguntas sobre esses dados.
+
+> **Arquitetura em transição (aprovada em 2026-10-29).** O produto está virando
+> **multi-tenant**, com **módulos contratados por cliente**, um **back-office**
+> da Blan para gerir clientes, módulos e integrações, e plataformas de
+> e-commerce plugadas como **conectores** (a Uappi é o primeiro). O canal de
+> WhatsApp sai do MVP e fica como evolução futura.
+>
+> - Design: [docs/superpowers/specs/2026-10-29-multi-tenant-modular-design.md](docs/superpowers/specs/2026-10-29-multi-tenant-modular-design.md)
+> - Regras e invariantes para quem desenvolve: [CLAUDE.md](CLAUDE.md)
+>
+> O guia abaixo descreve o código **como ele está hoje** (uma organização,
+> Uappi embutida, `ADMIN`/`VIEWER`). Ele será atualizado conforme a migração
+> avançar.
+
 # Rodar o projeto localmente
 
 Do zero a um painel preenchido. Tudo aqui foi executado neste repositório; os
@@ -127,8 +146,8 @@ Um comando cobre as três integrações mockadas: configura a organização
 os pedidos pelo pipeline real. Ao final ele imprime as contagens e **o período
 que você deve escolher no painel**.
 
-Esperado: 25 pedidos, 35 itens, 22 clientes, R$ 5.254,40, de 2026-07-01 a
-2026-07-29.
+Esperado: 15 pedidos, 20 itens, 14 clientes, R$ 3.947,10, de 2026-07-01 a
+2026-07-20.
 
 ⚠️ Recusa se `MOCK_EXTERNAL_APIS` não for `"true"`, e nunca sobrescreve
 credencial já configurada. Pode rodar duas vezes sem duplicar nada.
@@ -167,6 +186,11 @@ Os dois estados vazios significam coisas diferentes:
 ---
 
 # Parte 2 — WhatsApp
+
+> **Fora do MVP.** O canal está desligado no código (rotas comentadas desde
+> 2026-09-30) e foi adiado na nova arquitetura até que os detalhes do canal e
+> os custos dos agentes sejam definidos. Os passos abaixo ficam como
+> referência.
 
 Precisa de três coisas que o painel não precisa: chave real da Anthropic,
 credenciais reais da Meta e um **túnel público** (a Meta entrega por webhook e

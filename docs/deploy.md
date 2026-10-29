@@ -1,5 +1,21 @@
 # Deploy
 
+> **Arquitetura em transição.** Este guia descreve o deploy atual (uma API que
+> serve o painel, um worker de sync e o worker de WhatsApp). No alvo aprovado em
+> 2026-10-29 ([design](superpowers/specs/2026-10-29-multi-tenant-modular-design.md)):
+>
+> - Dois frontends com build próprio: painel do cliente em `app.<domínio>` e
+>   back-office da Blan em `admin.<domínio>`.
+> - A mesma API atende `/api/*` (cliente) e `/internal/*` (operador), com CORS
+>   separado (`PANEL_ORIGIN`, `BACKOFFICE_ORIGIN`) e segredo de token próprio
+>   para operadores (`OPERATOR_JWT_SECRET`).
+> - Variável global nova: `MONDAY_API_TOKEN`. As `WHATSAPP_*` deixam de ser
+>   obrigatórias e o serviço `whatsapp` sai do compose padrão.
+> - O provisionamento passa a ser: script `create-operator` para o primeiro
+>   operador e, depois, tudo pelo back-office (clientes, módulos, integrações e
+>   o primeiro Admin de cada cliente). A seção "Provisionamento" abaixo vale até
+>   essa migração.
+
 ## Staging
 
 ```bash

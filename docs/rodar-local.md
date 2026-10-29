@@ -1,5 +1,7 @@
 # Rodar o projeto localmente
 
+> **Arquitetura em transição (2026-10-29):** este guia descreve o código como está hoje. O alvo (multi-tenant, módulos, back-office, conectores; WhatsApp fora do MVP) está em [`superpowers/specs/2026-10-29-multi-tenant-modular-design.md`](superpowers/specs/2026-10-29-multi-tenant-modular-design.md) e as regras para quem desenvolve, no `CLAUDE.md` da raiz.
+
 Do zero a um painel preenchido. Tudo aqui foi executado neste repositório; os
 ⚠️ marcam armadilhas reais, não hipóteses.
 
