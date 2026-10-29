@@ -23,6 +23,8 @@ O projeto está **em transição**. Leia isto antes de mudar qualquer coisa.
 
 **Fonte da verdade do alvo:**
 [docs/superpowers/specs/2026-10-29-multi-tenant-modular-design.md](docs/superpowers/specs/2026-10-29-multi-tenant-modular-design.md).
+**Plano de execução:**
+[docs/superpowers/plans/2026-10-29-multi-tenant-modular.md](docs/superpowers/plans/2026-10-29-multi-tenant-modular.md).
 Código novo segue o alvo. Não estenda o modelo antigo (ex.: não adicione mais
 colunas de integração em `Organization`).
 
@@ -50,8 +52,10 @@ bibliotecas) são decisão sua; registre-os no PR.
   credenciais.
 - **Monday:** token global da Blan (`MONDAY_API_TOKEN`); por cliente só o
   `boardId`. O módulo Sprint mostra o desempenho da equipe de dev da Blan.
-- **GA4:** uma service account global da Blan; o cliente concede acesso à
-  propriedade dele.
+- **GA4:** service accounts globais da Blan (`GA4_CREDENTIALS_JSON`,
+  `GA4_APP_CREDENTIALS_JSON`); o cliente concede acesso à propriedade dele.
+- **Modelo canônico de commerce = tabelas atuais** (`CommerceOrder` etc.), sem
+  `integrationId` e sem renomear campos no MVP.
 - **Usuários do cliente:** o Admin cria com senha provisória
   (`mustChangePassword`); sem e-mail no MVP.
 - **Fora do MVP:** WhatsApp, planos/cobrança integrada, cliente editando
@@ -63,11 +67,13 @@ Quebrar qualquer um destes é bug crítico.
 
 1. **Isolamento por cliente.** Toda consulta a dado de cliente filtra por
    `organizationId` vindo do token, nunca do corpo da requisição.
-2. **Três checagens em toda rota de módulo**, com a mesma função de
+2. **Três checagens em toda rota de dados ou de módulo**, com as funções de
    `packages/entitlements`: módulo em vigor no cliente → usuário pode ver →
-   papel permite a ação. Vale para a API, para `/api/metrics/*` e
-   `/api/tools/:source/:name` (pela `source`) e para **as ferramentas do
-   agente**, que são montadas por requisição só com os módulos visíveis.
+   papel permite a ação. Rotas de dados checam a **fonte** pedida
+   (`metricId` ou `:source`); rotas de funcionalidade (agente, análise de
+   versão) checam o módulo. O agente recebe um gateway restrito às fontes
+   liberadas. Permissões são lidas do banco **a cada requisição**, nunca do
+   token.
 3. **Dois mundos de autenticação.** `/internal/*` (operador,
    `PlatformOperator`, TOTP, `aud = "operator"`, `OPERATOR_JWT_SECRET`) e
    `/api/*` (cliente, `User`, `aud = "client"`). Um token nunca vale no outro
@@ -95,7 +101,9 @@ Quebrar qualquer um destes é bug crítico.
 - Cache do `MetricGateway`: 5 min para período aberto, 24 h para fechado; a
   chave inclui a organização. Autorização acontece **antes** do gateway.
 - Erros: 403 `module_not_available` (sem revelar se é contrato ou permissão),
-  409 `integration_pending`, 502 para falha de fonte externa.
+  403 `organization_suspended` / `password_change_required` /
+  `readonly_session` / `forbidden`, 409 `integration_pending`, 502 para falha
+  de fonte externa, 401 para token inválido ou usuário desativado.
 
 ## Stack e estrutura
 
@@ -108,10 +116,11 @@ apps/
   api/          API Fastify (/api/* cliente; /internal/* operador — alvo), sync worker, agente
   web/          painel do cliente (app.<domínio>)
   backoffice/   console da Blan (admin.<domínio>) — a criar
+  api/prisma/   schema e migrações (continua aqui no MVP)
 packages/
-  db/           Prisma — a extrair de apps/api/prisma
-  entitlements/ catálogo de módulos e checagens — a criar
-  connectors/   interface de conector + Uappi — a criar (absorve uappi-client e uappi-sync)
+  entitlements/ catálogo de módulos e checagens puras — a criar
+  connectors/   interface de conector, executor de sync, conector Uappi — a criar (absorve uappi-sync)
+  uappi-client/ cliente HTTP da Uappi; só packages/connectors importa
   mcp-core/     McpPool, MetricGateway, cache
   mcp-*/        MCP servers por fonte: commerce, ga4, behavior, firebase, quality, sprint
   pii/ secrets/ shared/
@@ -150,8 +159,12 @@ Armadilhas reais (detalhes em [README.md](README.md)):
 
 - Código, comentários e docs em **português**; identificadores em inglês, como
   no código existente.
-- Commits no padrão `tipo(escopo): descrição` (ex.: `feat(api): ...`), em
-  branch `feature/...`, via PR para `main`.
+- **Nunca faça commit.** Ao concluir uma feature ou tarefa, pare, mostre o que
+  mudou (arquivos e resultado dos testes) e espere o aceite do responsável. O
+  commit é feito por ele. Vale também para passos "Commit" de planos em
+  `docs/superpowers/plans/`: trate-os como ponto de parada para aceite. Pode
+  sugerir a mensagem no padrão `tipo(escopo): descrição` (ex.:
+  `feat(api): ...`), em branch `feature/...`, via PR para `main`.
 - Teste junto com a mudança. Em autorização, teste o caminho negado (outro
   cliente, módulo suspenso, Membro sem acesso, token do outro mundo,
   sessão somente leitura).

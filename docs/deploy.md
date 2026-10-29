@@ -11,6 +11,12 @@
 >   para operadores (`OPERATOR_JWT_SECRET`).
 > - Variável global nova: `MONDAY_API_TOKEN`. As `WHATSAPP_*` deixam de ser
 >   obrigatórias e o serviço `whatsapp` sai do compose padrão.
+> - Na primeira subida da versão multi-tenant, depois do `prisma migrate
+>   deploy`, roda-se uma vez o script de dados `migrate-to-multitenant`
+>   (idempotente), que move as integrações da organização atual para a tabela
+>   `Integration` e ativa todos os módulos para ela.
+> - O back-office é servido por um container estático próprio
+>   (`admin.<domínio>`) e chama a API pela URL absoluta.
 > - O provisionamento passa a ser: script `create-operator` para o primeiro
 >   operador e, depois, tudo pelo back-office (clientes, módulos, integrações e
 >   o primeiro Admin de cada cliente). A seção "Provisionamento" abaixo vale até

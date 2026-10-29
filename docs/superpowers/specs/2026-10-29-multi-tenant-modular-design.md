@@ -1,7 +1,9 @@
 # Design: multi-tenant, módulos contratáveis e conectores de e-commerce
 
 **Data:** 2026-10-29
-**Status:** aprovado em conversa; aguardando revisão deste documento
+**Status:** aprovado em conversa; revisado contra o código em 2026-10-29
+(decisões marcadas "Design (revisão)" na §14)
+**Plano:** `docs/superpowers/plans/2026-10-29-multi-tenant-modular.md`
 **Substitui:** a premissa de "uma organização, uma integração Uappi fixa" do plano
 `docs/superpowers/plans/2026-08-05-center-analytics-uappi.md`.
 
@@ -118,13 +120,15 @@ O isolamento é garantido assim:
 
 | Pacote | Conteúdo |
 |---|---|
-| `packages/db` | `schema.prisma`, migrações e o client, extraídos de `apps/api`. |
-| `packages/entitlements` | Catálogo de módulos e as funções de checagem de acesso. Sem dependência de Fastify. |
-| `packages/connectors` | Interface de conector, modelo canônico de commerce e o conector Uappi (absorve `uappi-client` e `uappi-sync`). |
+| `packages/entitlements` | Catálogo de módulos e as funções puras de checagem de acesso. Sem dependência de Fastify nem de Prisma. |
+| `packages/connectors` | Interface de conector, executor genérico de sync, gravação no modelo canônico e o conector Uappi. Absorve `uappi-sync`, que deixa de existir. |
 
-O nome e a divisão interna exata de `packages/connectors` (um pacote com
-subpastas por plataforma ou um pacote por conector) ficam a critério de quem
-implementa; a regra é que **nada fora dele importa código da Uappi**.
+- `packages/uappi-client` continua como o cliente HTTP da Uappi, importado
+  **só** por `packages/connectors`. A regra é que nada fora de
+  `packages/connectors` importa código da Uappi.
+- O Prisma **continua em `apps/api/prisma`** no MVP: a API do back-office roda
+  no mesmo processo. A extração para `packages/db` acontece junto com a
+  separação de `apps/backoffice-api`, quando ela vier.
 
 ## 5. Catálogo de módulos
 
@@ -138,13 +142,21 @@ Cada módulo declara:
 interface ModuleDefinition {
   key: ModuleKey;                 // estável, nunca renomeada
   label: string;                  // nome exibido
-  menuPath: string;               // rota no apps/web
-  apiPrefixes: string[];          // rotas de API que só respondem com o módulo
-  metricSources: MetricSource[];  // fontes do MetricGateway liberadas
-  agentTools: string[];           // ferramentas do agente liberadas
-  requiredIntegrations: IntegrationKind[]; // o que precisa estar configurado
+  menuPath: string | null;        // rota no apps/web (null = sem página: assistant)
+  sources: MetricSource[];        // fontes do MetricGateway que o módulo libera
+  requires: MetricSource[];       // fontes que precisam estar prontas para o módulo ficar 'ready'
 }
 ```
+
+`requires` é igual a `sources`, exceto em Aquisição: ali `behavior` (que
+depende do export do BigQuery) é opcional, e o módulo fica pronto só com `ga4`
+e `commerce`.
+
+A **fonte** é a unidade de autorização dos dados: as rotas de dados são
+genéricas por fonte (`/api/metrics/*`, `/api/tools/:source/:name`), e as
+ferramentas do agente também consultam por fonte. As integrações exigidas
+derivam das fontes (§7.3). Rotas de funcionalidade que não são "uma fonte"
+(o agente e a análise de versão do app) são protegidas pelo módulo.
 
 Módulos do MVP (as rotas e fontes refletem o que as telas usam hoje):
 
@@ -161,14 +173,14 @@ Módulos do MVP (as rotas e fontes refletem o que as telas usam hoje):
 Regras:
 - **Visão geral** hoje mostra cards de ga4, quality e sprint. Cada card só
   aparece se o usuário puder ver o módulo dono daquela fonte.
-- **`/api/analysis/correlate`** pertence a `acquisition`;
-  **`/api/analysis/app-version-impact`** pertence a `app_usage`. *(Decisão de
-  design, não do cliente.)*
+- **`/api/analysis/correlate`** exige as fontes das duas métricas pedidas;
+  **`/api/analysis/app-version-impact`** exige o módulo `app_usage`.
+  *(Decisão de design, não do cliente.)*
 - **Fontes compartilhadas:** uma fonte liberada por qualquer módulo visível
   está liberada. `commerce` aparece em vários módulos de propósito.
-- **Assistente:** recebe só as ferramentas dos módulos que o usuário pode ver.
-  Sem o módulo `assistant`, o painel lateral não aparece e
-  `/api/agent/*` responde 403.
+- **Assistente:** recebe só as ferramentas cujas fontes o usuário pode ver, e o
+  gateway entregue a ele recusa qualquer outra fonte. Sem o módulo
+  `assistant`, o painel lateral não aparece e `/api/agent/*` responde 403.
 - **Sprint** mostra o desempenho da equipe de desenvolvimento da Blan no board
   do cliente. Só faz sentido para clientes com projeto na Blan; para os outros,
   simplesmente não é ativado.
@@ -221,9 +233,11 @@ para todos os clientes.
 | `APP_STORE` | `APP_STORE_CONNECT` | `appId` | chave da App Store Connect |
 | `SPRINT_BOARD` | `MONDAY` | `boardId` | — (token global da Blan) |
 
-- GA4: a Blan usa **uma service account global** (variáveis de ambiente atuais).
-  O cliente concede acesso à propriedade dele para o e-mail dessa service
-  account; o back-office mostra esse e-mail na tela de cadastro.
+- GA4: a Blan usa **service accounts globais**, nas variáveis de ambiente
+  atuais: `GA4_CREDENTIALS_JSON` (site e BigQuery) e
+  `GA4_APP_CREDENTIALS_JSON` (app; se vazia, cai na primeira). O cliente
+  concede acesso à propriedade dele para o e-mail da service account; o
+  back-office mostra esse e-mail na tela de cadastro.
 - Monday: o token é **da Blan**, em variável de ambiente; por cliente só existe
   o `boardId`.
 - `secrets` nunca sai da API: nem para o back-office (que só grava e vê
@@ -255,16 +269,15 @@ para todos os clientes.
 - `email` continua único no sistema inteiro: uma pessoa pertence a um cliente.
 
 **Read models de commerce** (`CommerceOrder`, `CommerceOrderItem`,
-`CommerceCustomer`, `AttributionTouch`)
-- Ganham `integrationId`.
-- Os campos com nome da Uappi (`numeroPedido`, `idPedido`, `statusId`, `canal`,
-  `origem`, `tipoVenda`) são renomeados para nomes canônicos
-  (ex.: `externalNumber`, `externalId`, `sourceStatusCode`, `channel`,
-  `origin`, `saleType`). `statusLabel`, `statusGroup` e `rawPayload` ficam.
-  Os nomes exatos são do implementador.
-
-**`SyncState`**: passa a ser por integração — único em
-(`integrationId`, `resource`).
+`CommerceCustomer`, `AttributionTouch`) e **`SyncState`**: **não mudam** no
+MVP.
+- Com uma loja por cliente, `organizationId` já identifica a origem dos dados;
+  um `integrationId` seria redundante.
+- As tabelas atuais **são** o modelo canônico. Nomes como `numeroPedido`,
+  `canal` e `origem` são termos do domínio em português, não contrato da API
+  da Uappi. Renomeá-los mexeria em cerca de 25 arquivos sem ganho no MVP.
+- Quando o segundo conector chegar, o modelo canônico é revisto com ele (o
+  candidato óbvio é `statusId`, que é numérico porque a Uappi usa números).
 
 **`WhatsAppIdentity`, `LinkCode`, `ProcessedWebhookEvent`**: ficam no schema,
 com comentário "não usado no MVP". Sem migração destrutiva.
@@ -293,19 +306,41 @@ um token de um lado é recusado no outro.
 Falha em 1 ou 2 → **403** com código `module_not_available`. A resposta não
 diz se o problema é contrato ou permissão.
 
-A checagem acontece em três lugares, todos com a mesma função de
+Outros códigos de recusa, todos 403: `organization_suspended`,
+`password_change_required` (enquanto `mustChangePassword`), `readonly_session`
+(sessão de visualização numa rota que não é de leitura) e `forbidden` (papel).
+Usuário desativado ou token de outro mundo → 401.
+
+A checagem é feita **a cada requisição, lendo o banco**: nada de módulo ou
+permissão vai dentro do token. Assim, suspender um módulo, desativar um
+usuário ou suspender um cliente vale na próxima requisição, sem esperar o
+token expirar. Ela acontece em três lugares, todos com as mesmas funções de
 `packages/entitlements`:
-- **API:** um hook por prefixo de rota (do catálogo). Rotas genéricas
-  (`/api/metrics/*`, `/api/tools/:source/:name`) checam a `source` pedida
-  contra as fontes liberadas.
-- **Agente:** o conjunto de ferramentas é montado por requisição a partir dos
-  módulos visíveis. Ferramenta fora do conjunto não existe para o modelo. O
-  system prompt lista só os módulos visíveis.
-- **Menu:** `GET /api/me` devolve os módulos visíveis com o estado de cada um
-  (`ready` | `awaiting_setup`). O front só usa isso para esconder itens; quem
-  protege é a API.
+- **API:** rotas de dados checam a `source` pedida (pelo `metricId` ou pelo
+  parâmetro `:source`) contra as fontes liberadas; o catálogo de métricas
+  devolve só as das fontes liberadas. Rotas de funcionalidade checam o
+  módulo.
+- **Agente:** recebe um gateway restrito às fontes liberadas e só as
+  ferramentas cujas fontes estão liberadas. O system prompt lista só os
+  módulos visíveis.
+- **Menu:** `GET /auth/me` (rota que já existe) passa a devolver também os
+  módulos visíveis com o estado de cada um (`ready` | `awaiting_setup`). O
+  front só usa isso para esconder itens; quem protege é a API.
 
 ### 7.3 "Aguardando configuração"
+Cada fonte exige uma integração com `status = OK` (basta uma da lista):
+
+| Fonte | Integração |
+|---|---|
+| `commerce` | `COMMERCE` |
+| `ga4`, `behavior` | `WEB_ANALYTICS` (`behavior` exige também `bigQueryDataset` no config) |
+| `firebase` | `APP_ANALYTICS` |
+| `quality` | `PLAY_STORE` ou `APP_STORE` |
+| `sprint` | `SPRINT_BOARD` |
+
+Um módulo está `ready` quando todas as fontes de `requires` estão prontas. Uma
+requisição a uma fonte liberada mas não pronta responde 409.
+
 Módulo em vigor cuja integração exigida não existe ou não está `OK`:
 - aparece no menu com o estado `awaiting_setup` e uma tela explicando que a
   equipe Blan está configurando;
@@ -324,30 +359,33 @@ módulo.
 Inspirado no protocolo do Airbyte (`check` / `discover` / `read` com estado).
 
 ```ts
-interface CommerceConnector {
-  provider: CommerceProvider;               // 'UAPPI'
-  configSchema: ZodSchema;                  // valida config + secrets no back-office
-  check(input: ConnectorInput): Promise<CheckResult>;     // credencial válida?
-  discover(input: ConnectorInput): Promise<StreamInfo[]>; // o que dá para ler
-  read(input: ConnectorInput, stream: StreamName, state: StreamState | null):
-    AsyncIterable<CanonicalRecord | StateCheckpoint>;
+interface CommerceConnector<TSettings> {
+  provider: CommerceProvider;                                   // 'UAPPI'
+  parseSettings(config: unknown, secrets: unknown): TSettings;  // zod; erro = 400 no back-office
+  check(settings: TSettings): Promise<CheckResult>;             // credencial válida?
+  discover(): StreamName[];                                     // ['orders'] na Uappi
+  readOrders(settings: TSettings, window: DateWindow, ctx: ReadContext):
+    AsyncIterable<CanonicalOrderRecord | ReadFailure>;
 }
 ```
 
-- **Modelo canônico:** pedidos, itens e clientes com os campos de §6.2. O sync
-  grava só registros canônicos; o MCP de commerce lê só o modelo canônico.
-- **Estado:** o conector emite checkpoints; o sync persiste em `SyncState`. A
-  estratégia atual da Uappi (janela por `dataEmissao`, backfill de
-  `SYNC_BACKFILL_DAYS`, overlap de 3 dias, limites de 120/60 req/min) passa a
-  ser detalhe interno do conector Uappi.
+- **Modelo canônico:** as tabelas atuais (§6.2). O sync grava só registros
+  canônicos; o MCP de commerce lê só o modelo canônico.
+- **Estado:** um cursor de data (`SyncState.cursorDate`), como hoje. O
+  executor genérico de `packages/connectors` calcula a janela (backfill de
+  `SYNC_BACKFILL_DAYS`, overlap de 3 dias) e chama `readOrders`. Os limites de
+  120/60 req/min continuam dentro do cliente da Uappi. Quando uma plataforma
+  precisar de outro tipo de cursor, a interface ganha esse tipo.
 - **Status de pedido:** o mapeamento para `OrderStatusGroup` é responsabilidade
   do conector. `REVENUE_STATUS_GROUPS` continua global.
-- **PII:** o conector entrega dados crus; a pseudonimização com
-  `@center/pii` acontece no sync, antes de gravar, para todo conector.
+- **PII:** o `ReadContext` entrega o `Pseudonymizer`, e o tipo
+  `CanonicalOrderRecord` só tem campos de hash. Um conector não consegue
+  gravar e-mail, documento ou `client_id` em claro sem mudar o tipo.
 - **Registro:** um mapa `provider → connector`. O sync worker percorre as
   integrações `COMMERCE` de clientes ativos e chama o conector do provider.
 - **`check`** é chamado pelo back-office ao salvar a integração e grava
-  `status` e `lastError` em `Integration`.
+  `status` e `lastError` em `Integration`. Um sync que falha grava o erro em
+  `SyncState.lastError`, como hoje.
 
 ## 9. Back-office (MVP)
 
@@ -370,8 +408,9 @@ Toda ação que altera dados grava em `OperatorAuditLog`.
 1. Operador clica em "Visualizar painel" → `POST /internal/organizations/:id/view-session`.
 2. A API grava `view_session.start` na auditoria e emite um JWT de cliente
    (`aud = "client"`) com validade de **30 min** e as claims
-   `readonly: true`, `viewedBy: <operatorId>`, `organizationId`, papel efetivo
-   `ADMIN` (vê todos os módulos em vigor).
+   `viewedBy: <operatorId>`, `organizationId`, `userId: "operator:<operatorId>"`
+   e papel efetivo `ADMIN` (vê todos os módulos em vigor). A presença de
+   `viewedBy` é o que torna a sessão somente leitura.
 3. O back-office abre `app.<domínio>/view-session#<token>`; o painel guarda o
    token e mostra uma **faixa fixa**: "Visualização da equipe Blan — somente
    leitura".
@@ -383,7 +422,7 @@ Toda ação que altera dados grava em `OperatorAuditLog`.
 
 ## 10. Painel do cliente (mudanças)
 
-- Menu e Visão geral montados a partir de `GET /api/me` (§7.2).
+- Menu e Visão geral montados a partir de `GET /auth/me` (§7.2).
 - **Usuários** (só Admin): criar usuário com nome, e-mail, papel e senha
   provisória; marcar os módulos de cada Membro; desativar. O Admin não pode
   desativar a si mesmo nem rebaixar o último Admin do cliente.
@@ -398,9 +437,10 @@ Toda ação que altera dados grava em `OperatorAuditLog`.
   liberado, fale com o Admin". *(Decisão de design.)*
 
 ### 10.1 Assistente: consumo por cliente
-Sem limite de uso no MVP. O consumo de tokens do LLM passa a ser gravado por
-mensagem (cliente, usuário, modelo, tokens de entrada e saída), para que a Blan
-consiga medir custo por cliente antes de decidir preço ou cota.
+Sem limite de uso no MVP. O consumo de tokens do LLM passa a ser gravado em
+cada `Message` do assistente (`model`, `inputTokens`, `outputTokens`); cliente
+e usuário vêm da `Conversation`. Assim a Blan mede custo por cliente antes de
+decidir preço ou cota.
 *(Decisão de design.)*
 
 ### 10.2 Endpoint público de atribuição
@@ -420,19 +460,30 @@ coletado já é pseudonimizado. O back-office mostra o snippet pronto, com o
   `PANEL_ORIGIN`.
 - Script `create-operator` para criar o primeiro operador (não existe tela para
   isso sem operador).
+- O back-office é um build estático (`apps/backoffice/dist`) servido por um
+  container próprio no compose de produção, em `admin.<domínio>`. Ele chama a
+  API pela URL absoluta (`VITE_API_URL`), por isso o CORS de `/internal/*`.
+  O painel continua servido pela própria API, na mesma origem.
+- O `mcp-firebase` passa a receber também `GA4_CREDENTIALS_JSON`, corrigindo o
+  fallback que hoje nunca funciona.
 
 ## 12. Migração do cliente atual
 
-Uma migração de dados, idempotente:
-1. A `Organization` existente recebe `status = ACTIVE` e um `slug`.
-2. Recebe **todos os módulos** do MVP em `OrganizationModule`
-   (`origin = MANUAL`).
-3. Cada campo de integração preenchido vira uma linha de `Integration` com o
-   mesmo valor cifrado (sem decifrar e recifrar quando o formato for igual).
-4. `VIEWER` vira `MEMBER` com `UserModuleAccess` para todos os módulos.
-5. Pedidos, itens, clientes e `SyncState` recebem o `integrationId` da
-   integração `COMMERCE`.
-6. Só depois, uma segunda migração remove as colunas antigas de
+1. **Migração de schema (Prisma):** cria as tabelas e colunas novas, renomeia
+   o valor `VIEWER` do enum para `MEMBER` (os usuários existentes viram
+   Membros automaticamente) e dá `status = ACTIVE` a toda organização. Não
+   remove nada.
+2. **Script de dados `migrate-to-multitenant`, idempotente**, rodado uma vez
+   no deploy. Para cada organização:
+   - preenche o `slug` a partir do nome;
+   - ativa **todos os módulos** do MVP (`origin = MANUAL`);
+   - transforma cada campo de integração preenchido numa linha de
+     `Integration`. Os segredos são decifrados e recifrados, porque
+     `Integration.secrets` guarda um JSON cifrado e as colunas antigas guardam
+     cada valor cifrado em separado;
+   - dá a cada Membro acesso a todos os módulos.
+3. **Segunda migração de schema**, em PR separado e só depois que nenhum
+   código lê as colunas antigas: remove os campos de integração de
    `Organization`.
 
 O `seed-demo` passa a criar um operador, um cliente, módulos e integrações no
@@ -440,8 +491,8 @@ modelo novo.
 
 ## 13. O que fica para quem implementa
 
-- Divisão em tarefas e ordem (sugestão: `packages/db` → entitlements e schema →
-  autorização na API → conector Uappi → back-office → painel → migração).
+- Divisão em tarefas e ordem: ver o plano
+  `docs/superpowers/plans/2026-10-29-multi-tenant-modular.md`.
 - Nomes exatos de rotas de `/internal/*`, de campos canônicos e de pacotes.
 - Biblioteca de TOTP e formato do QR code.
 - Layout das telas do back-office.
@@ -480,3 +531,9 @@ projetos separados.
 | Assistente sem cota no MVP; consumo de tokens gravado por cliente | Design |
 | Atribuição pública aceita só cliente ativo, sem checar módulo | Design |
 | Token de operador com validade de 8 h | Design |
+| Prisma continua em `apps/api` no MVP (sem `packages/db`) | Design (revisão) |
+| Read models e `SyncState` sem mudança; as tabelas atuais são o modelo canônico | Design (revisão) |
+| Autorização de dados por fonte; de funcionalidade, por módulo | Design (revisão) |
+| Permissões lidas do banco a cada requisição, nunca do token | Design (revisão) |
+| `/auth/me` estendida em vez de `/api/me` | Design (revisão) |
+| Back-office estático em container próprio, chamando a API com CORS | Design (revisão) |

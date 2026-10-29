@@ -6,6 +6,7 @@ FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/pii/package.json packages/pii/
+COPY packages/entitlements/package.json packages/entitlements/
 COPY packages/secrets/package.json packages/secrets/
 COPY packages/uappi-client/package.json packages/uappi-client/
 COPY packages/uappi-sync/package.json packages/uappi-sync/
