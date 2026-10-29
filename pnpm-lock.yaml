@@ -38,6 +38,9 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^1.0.0
         version: 1.0.58(zod@3.25.76)
+      '@center/entitlements':
+        specifier: workspace:*
+        version: link:../../packages/entitlements
       '@center/mcp-core':
         specifier: workspace:*
         version: link:../../packages/mcp-core
