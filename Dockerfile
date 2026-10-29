@@ -9,7 +9,7 @@ COPY packages/pii/package.json packages/pii/
 COPY packages/entitlements/package.json packages/entitlements/
 COPY packages/secrets/package.json packages/secrets/
 COPY packages/uappi-client/package.json packages/uappi-client/
-COPY packages/uappi-sync/package.json packages/uappi-sync/
+COPY packages/connectors/package.json packages/connectors/
 COPY packages/mcp-core/package.json packages/mcp-core/
 COPY packages/mcp-commerce/package.json packages/mcp-commerce/
 COPY packages/mcp-ga4/package.json packages/mcp-ga4/

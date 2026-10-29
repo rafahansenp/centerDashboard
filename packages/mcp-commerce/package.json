@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@center/pii": "workspace:*",
-    "@center/uappi-sync": "workspace:^",
+    "@center/connectors": "workspace:^",
     "dotenv": "^16.6.1"
   }
 }

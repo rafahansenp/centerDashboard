@@ -208,7 +208,7 @@ export const TOUCH_LEAD_MINUTES = 20;
  * (que junta por período E por `visitorHash`).
  *
  * A alternativa escolhida não inventa PII nenhuma: `visitorHash` já é o HMAC
- * que `mapAttribution` (uappi-sync/mapper.ts) calculou com o mesmo
+ * que `mapAttribution` (connectors/uappi/mapper.ts) calculou com o mesmo
  * `Pseudonymizer` que o endpoint público usaria — nunca um client_id em
  * claro. `source`/`medium`/`campaign`/`device` são as mesmas tags já
  * normalizadas (minúsculas) que o pedido carrega. Nenhum campo aqui é

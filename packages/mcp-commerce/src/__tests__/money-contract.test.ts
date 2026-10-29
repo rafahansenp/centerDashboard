@@ -1,6 +1,6 @@
 import { Pseudonymizer } from '@center/pii';
-import { UappiOrderSchema } from '@center/uappi-sync';
-import { mapOrder } from '@center/uappi-sync';
+import { UappiOrderSchema } from '@center/connectors';
+import { mapOrder } from '@center/connectors';
 import { createCommerceProvider } from '../provider.js';
 import { prisma, resetCommerceData, seedOrders, TEST_ORG } from './helpers/seed.js';
 

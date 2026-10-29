@@ -1,4 +1,4 @@
-import { UappiOrderSchema, UappiOrderSummarySchema } from '../schemas.js';
+import { UappiOrderSchema, UappiOrderSummarySchema } from '../uappi/schemas.js';
 
 const fullOrder = {
   idPedido: 9001,

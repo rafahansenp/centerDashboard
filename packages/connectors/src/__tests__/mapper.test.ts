@@ -1,6 +1,6 @@
 import { Pseudonymizer } from '@center/pii';
-import { UappiOrderSchema } from '../schemas.js';
-import { mapOrder, parseUappiDate } from '../mapper.js';
+import { UappiOrderSchema } from '../uappi/schemas.js';
+import { mapOrder, parseUappiDate } from '../uappi/mapper.js';
 
 const pseudonymizer = new Pseudonymizer('p'.repeat(32));
 

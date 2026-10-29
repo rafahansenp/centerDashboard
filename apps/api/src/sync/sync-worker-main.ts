@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Pseudonymizer } from '@center/pii';
 import { SecretBox } from '@center/secrets';
-import { UappiClient, UappiTokenProvider, MockUappiClient, type UappiClientLike, type UappiCredentials } from '@center/uappi-client';
+import { createConnectorRegistry } from '@center/connectors';
 import { loadConfig } from '../config.js';
 import { syncAllOrganizations } from './scheduler.js';
 
@@ -10,16 +10,11 @@ const prisma = new PrismaClient();
 const pseudonymizer = new Pseudonymizer(config.piiPepper);
 const secretBox = new SecretBox(config.credentialsEncryptionKey);
 
-function buildClient(credentials: UappiCredentials): UappiClientLike {
-  // MOCK_EXTERNAL_APIS=true (T4, T5B) ignora as credenciais e roda contra a
-  // fixture — permite subir o sync sem apiKey/secretKey reais da Uappi.
-  if (config.mockExternalApis) return new MockUappiClient();
-
-  // Um token provider por organização: as credenciais são diferentes e o cache
-  // de token não pode vazar entre lojas.
-  const tokenProvider = new UappiTokenProvider({ baseUrl: config.uappiBaseUrl, credentials });
-  return new UappiClient({ baseUrl: config.uappiBaseUrl, tokenProvider });
-}
+// Cliente HTTP (ou mock, com MOCK_EXTERNAL_APIS=true) é construído dentro do conector.
+const connector = createConnectorRegistry({
+  uappiBaseUrl: config.uappiBaseUrl,
+  mock: config.mockExternalApis,
+}).get('UAPPI');
 
 let running = false;
 
@@ -33,7 +28,7 @@ async function tick(): Promise<void> {
   const startedAt = Date.now();
   try {
     const report = await syncAllOrganizations({
-      prisma, config, pseudonymizer, secretBox, buildClient,
+      prisma, config, pseudonymizer, secretBox, connector,
       logger: (message, meta) => console.log(message, meta ?? ''),
     });
     console.log(`ciclo concluído em ${Date.now() - startedAt}ms`, report);

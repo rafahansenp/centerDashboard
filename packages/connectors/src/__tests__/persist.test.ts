@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { persistOrder } from '../persist.js';
-import type { MappedOrder, MappedOrderItem } from '../mapper.js';
+import type { MappedOrder, MappedOrderItem } from '../uappi/mapper.js';
 
 const ORG = 'org_1';
 
@@ -16,7 +16,7 @@ interface FakeCustomerRow {
 
 /**
  * Prisma real de verdade (não mock) roda em `mcp-commerce`, que é quem tem o
- * schema/migrations neste monorepo. `uappi-sync` não tem esse setup — as
+ * schema/migrations neste monorepo. `connectors` não tem esse setup — as
  * suítes existentes (`sync.test.ts`) já mockam o Prisma inteiro, e este teste
  * segue o mesmo padrão, mas com um fake com estado que reproduz o que a
  * consulta SQL real faz (upsert + `LEAST` no UPDATE), para provar que a

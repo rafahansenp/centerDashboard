@@ -38,6 +38,9 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^1.0.0
         version: 1.0.58(zod@3.25.76)
+      '@center/connectors':
+        specifier: workspace:^
+        version: link:../../packages/connectors
       '@center/entitlements':
         specifier: workspace:*
         version: link:../../packages/entitlements
@@ -53,12 +56,6 @@ importers:
       '@center/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@center/uappi-client':
-        specifier: workspace:^
-        version: link:../../packages/uappi-client
-      '@center/uappi-sync':
-        specifier: workspace:^
-        version: link:../../packages/uappi-sync
       '@fastify/cors':
         specifier: ^10.0.1
         version: 10.1.0
@@ -158,6 +155,24 @@ importers:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@22.20.1)(jiti@1.21.7)
 
+  packages/connectors:
+    dependencies:
+      '@center/pii':
+        specifier: workspace:*
+        version: link:../pii
+      '@center/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@center/uappi-client':
+        specifier: workspace:*
+        version: link:../uappi-client
+      '@prisma/client':
+        specifier: ^6.1.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
   packages/entitlements:
     dependencies:
       '@center/shared':
@@ -194,12 +209,12 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@center/connectors':
+        specifier: workspace:^
+        version: link:../connectors
       '@center/pii':
         specifier: workspace:*
         version: link:../pii
-      '@center/uappi-sync':
-        specifier: workspace:^
-        version: link:../uappi-sync
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
@@ -303,24 +318,6 @@ importers:
 
   packages/uappi-client:
     dependencies:
-      zod:
-        specifier: ^3.24.1
-        version: 3.25.76
-
-  packages/uappi-sync:
-    dependencies:
-      '@center/pii':
-        specifier: workspace:*
-        version: link:../pii
-      '@center/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@center/uappi-client':
-        specifier: workspace:*
-        version: link:../uappi-client
-      '@prisma/client':
-        specifier: ^6.1.0
-        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
       zod:
         specifier: ^3.24.1
         version: 3.25.76

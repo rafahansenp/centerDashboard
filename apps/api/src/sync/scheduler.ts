@@ -1,8 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Pseudonymizer } from '@center/pii';
 import type { SecretBox } from '@center/secrets';
-import type { UappiClientLike, UappiCredentials } from '@center/uappi-client';
-import { runIncrementalSync } from '@center/uappi-sync';
+import { runCommerceSync, type CommerceConnector } from '@center/connectors';
 import type { AppConfig } from '../config.js';
 
 export interface SchedulerDeps {
@@ -11,7 +10,8 @@ export interface SchedulerDeps {
   pseudonymizer: Pseudonymizer;
   /** Decifra `uappiApiKey`/`uappiSecretKey`, gravados cifrados pela T24B. */
   secretBox: SecretBox;
-  buildClient: (credentials: UappiCredentials) => UappiClientLike;
+  /** Conector Uappi, vindo do `ConnectorRegistry` (o worker o constrói). */
+  connector: CommerceConnector;
   logger?: (message: string, meta?: Record<string, unknown>) => void;
   now?: () => Date;
 }
@@ -45,17 +45,20 @@ export async function syncAllOrganizations(deps: SchedulerDeps): Promise<Schedul
     try {
       // As duas colunas guardam texto cifrado (T24B) — nunca a credencial em
       // claro. O decrypt acontece aqui, no único ponto que precisa do valor real.
-      const client = deps.buildClient({
+      const credentials = {
         apiKey: deps.secretBox.decryptOrNull(organization.uappiApiKey)!,
         secretKey: deps.secretBox.decryptOrNull(organization.uappiSecretKey)!,
-      });
+      };
 
-      const result = await runIncrementalSync({
+      const result = await runCommerceSync({
         prisma: deps.prisma,
-        client,
+        connector: deps.connector,
+        settings: {
+          credentials,
+          statusOverrides: (organization.statusMapping as Record<string, string> | null) ?? null,
+        },
         pseudonymizer: deps.pseudonymizer,
         organizationId: organization.id,
-        statusOverrides: (organization.statusMapping as Record<string, string> | null) ?? null,
         ...(deps.now ? { now: deps.now } : {}),
         logger: log,
       }, { backfillDays: deps.config.syncBackfillDays });

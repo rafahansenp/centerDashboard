@@ -3,7 +3,7 @@ import type { IterateOrdersParams, ListOrdersPage, ListOrdersParams } from './cl
 /**
  * O contrato que qualquer consumidor (sync, spikes) deve depender — nunca da
  * classe concreta `UappiClient`. É o que permite `MockUappiClient` substituir
- * o cliente real sem que `packages/uappi-sync` saiba a diferença.
+ * o cliente real sem que `packages/connectors` saiba a diferença.
  */
 export interface UappiClientLike {
   listOrders(params: ListOrdersParams): Promise<ListOrdersPage>;

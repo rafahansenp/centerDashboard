@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Pseudonymizer } from '@center/pii';
 import { SecretBox } from '@center/secrets';
-import { MockUappiClient, type UappiClientLike } from '@center/uappi-client';
+import { createConnectorRegistry } from '@center/connectors';
 import { loadConfig } from '../src/config.js';
 import { syncAllOrganizations } from '../src/sync/scheduler.js';
 import {
@@ -71,7 +71,7 @@ async function main(): Promise<number> {
       config,
       pseudonymizer,
       secretBox,
-      buildClient: (): UappiClientLike => new MockUappiClient(),
+      connector: createConnectorRegistry({ uappiBaseUrl: config.uappiBaseUrl, mock: true }).get('UAPPI'),
       logger: (message, meta) => console.log(`  [sync] ${message}`, meta ?? ''),
     });
     if (syncReport.organizations === 0) {

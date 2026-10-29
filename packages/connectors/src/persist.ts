@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import type { MappedOrder, MappedOrderItem } from './mapper.js';
+import type { MappedOrder, MappedOrderItem } from './uappi/mapper.js';
 
 export interface PersistDeps {
   prisma: PrismaClient;

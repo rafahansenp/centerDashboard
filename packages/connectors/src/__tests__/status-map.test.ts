@@ -1,4 +1,4 @@
-import { resolveStatusGroup } from '../status-map.js';
+import { resolveStatusGroup } from '../uappi/status-map.js';
 
 describe('resolveStatusGroup — padrões por texto', () => {
   it.each([

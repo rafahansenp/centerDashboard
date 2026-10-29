@@ -102,7 +102,7 @@ export function createCommerceProvider(prisma: PrismaClient): MetricProvider {
         }, c."firstOrderAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo'), 'YYYY-MM-DD')`;
 
         // Um cliente cujo único pedido é CANCELLED/FAILED/PENDING_PAYMENT não é
-        // "cliente novo" — `firstOrderAt` (uappi-sync) é gravado independente
+        // "cliente novo" — `firstOrderAt` (connectors) é gravado independente
         // do status do pedido, então sem este filtro um lote de fraude
         // recusada contaria como aquisição real. O join contra o próprio
         // pedido do `firstOrderAt` reusa `REVENUE_STATUS_GROUPS`, a mesma
