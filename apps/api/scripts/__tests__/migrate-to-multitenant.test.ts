@@ -6,7 +6,7 @@ import {
   type LegacyOrgRow,
 } from '../lib/migrate-to-multitenant.js';
 
-const box = new SecretBox(Buffer.alloc(32, 7).toString('base64'));
+const box = new SecretBox('07'.repeat(32));
 
 const emptyOrg: LegacyOrgRow = {
   id: 'org_1', name: 'Loja Teste', slug: null,
@@ -79,7 +79,7 @@ function fakePrisma(opts: { legacyColumns: boolean; org?: Partial<LegacyOrgRow>;
       return [org];
     }),
     organization: {
-      findMany: jest.fn(async () => [{ slug: null }]),
+      findMany: jest.fn(async () => [{ id: 'org_1', name: 'Loja Teste', slug: null }]),
       update: jest.fn(async () => ({})),
     },
     integration: {
