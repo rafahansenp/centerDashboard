@@ -2,12 +2,13 @@ import { PrismaClient } from '@prisma/client';
 import { Pseudonymizer } from '@center/pii';
 import { SecretBox } from '@center/secrets';
 import { createConnectorRegistry } from '@center/connectors';
+import { MODULE_KEYS } from '@center/entitlements';
 import { loadConfig } from '../src/config.js';
 import { syncAllOrganizations } from '../src/sync/scheduler.js';
 import {
   SeedDemoRefusedError,
   assertMockMode,
-  planIntegrationWrite,
+  planDemoIntegrations,
   buildAttributionTouchData,
   buildAppStoreSnapshots,
   buildAppFeedback,
@@ -50,14 +51,33 @@ async function main(): Promise<number> {
     const secretBox = new SecretBox(config.credentialsEncryptionKey);
     const pseudonymizer = new Pseudonymizer(config.piiPepper);
 
-    // 1. Configura a organização pelas MESMAS colunas que a página de
-    //    Configurações escreve (settings.ts), cifrando a credencial da
-    //    Uappi com o mesmo SecretBox — nunca um caminho de gravação paralelo.
-    //    Nunca sobrescreve valor não nulo já existente.
-    const plan = planIntegrationWrite(org, (plaintext) => secretBox.encrypt(plaintext));
-    if (Object.keys(plan.data).length > 0) {
-      await prisma.organization.update({ where: { id: org.id }, data: plan.data });
+    // 1. Grava as integrações demo no modelo novo (Integration), cifrando os
+    //    segredos da COMMERCE com o mesmo SecretBox — nunca um caminho de
+    //    gravação paralelo. Nunca sobrescreve uma integração que já exista.
+    const existing = await prisma.integration.findMany({ where: { organizationId: org.id }, select: { kind: true } });
+    const writes = planDemoIntegrations(existing, secretBox);
+    for (const write of writes) {
+      await prisma.integration.create({
+        data: {
+          organizationId: org.id,
+          kind: write.kind,
+          provider: write.provider as never,
+          config: write.config as never,
+          secrets: write.secrets,
+          secretsUpdatedAt: write.secrets ? new Date() : null,
+          status: 'OK',
+        },
+      });
     }
+    await prisma.organizationModule.createMany({
+      data: MODULE_KEYS.map((moduleKey) => ({ organizationId: org.id, moduleKey, origin: 'MANUAL' as const })),
+      skipDuplicates: true,
+    });
+    const notes = [
+      writes.length > 0
+        ? `integrações demo gravadas: ${writes.map((w) => w.kind).join(', ')}.`
+        : 'integrações já configuradas — mantidas intactas, nada sobrescrito.',
+    ];
 
     // 2. Sync real: mesmo `syncAllOrganizations` do worker de produção
     //    (sync-worker-main.ts), com o `MockUappiClient` no lugar do cliente
@@ -71,7 +91,7 @@ async function main(): Promise<number> {
       config,
       pseudonymizer,
       secretBox,
-      connector: createConnectorRegistry({ uappiBaseUrl: config.uappiBaseUrl, mock: true }).get('UAPPI'),
+      connectors: createConnectorRegistry({ uappiBaseUrl: config.uappiBaseUrl, mock: true }),
       logger: (message, meta) => console.log(`  [sync] ${message}`, meta ?? ''),
     });
     if (syncReport.organizations === 0) {
@@ -173,7 +193,7 @@ async function main(): Promise<number> {
 
     console.log('');
     console.log(`organização: "${org.name}" (${org.id})`);
-    for (const note of plan.notes) console.log(`  - ${note}`);
+    for (const note of notes) console.log(`  - ${note}`);
     console.log('');
     console.log('estado do banco após o seed:');
     console.log(`  pedidos: ${orderCount}`);

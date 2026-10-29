@@ -7,6 +7,10 @@
  * precisam ser exercitadas em teste sem depender de um Postgres real.
  */
 import type { Prisma } from '@prisma/client';
+import type { SecretBox } from '@center/secrets';
+import type { IntegrationKind } from '@center/entitlements';
+import { encryptSecrets } from '../../src/integrations/repository.js';
+import type { IntegrationWrite } from './migrate-to-multitenant.js';
 
 /** Lançada quando o script se recusa a rodar — nunca um upsert silencioso. */
 export class SeedDemoRefusedError extends Error {}
@@ -28,22 +32,6 @@ export function assertMockMode(mockExternalApis: boolean): void {
     );
   }
 }
-
-/** As mesmas colunas que `apps/api/src/routes/settings.ts` lê/escreve, mais as
- * novas integrações do app mobile (nota da loja, Firebase, Monday.com) — ainda
- * sem uma tela de Configurações própria, mas gravadas pela mesma convenção. */
-export interface OrgIntegrationColumns {
-  uappiApiKey: string | null;
-  uappiSecretKey: string | null;
-  ga4PropertyId: string | null;
-  ga4BigQueryDataset: string | null;
-  ga4AppPropertyId: string | null;
-  playConsoleCredsJson: string | null;
-  appStoreConnectKeyJson: string | null;
-  mondayApiToken: string | null;
-  mondayBoardId: string | null;
-}
-
 /** Qualquer valor não vazio serve em modo mock — ver docs/rodar-local.md, Passo 8. */
 export const DEMO_UAPPI_API_KEY = 'demo-mock-uappi-key';
 export const DEMO_UAPPI_SECRET_KEY = 'demo-mock-uappi-secret';
@@ -56,107 +44,35 @@ export const DEMO_MONDAY_API_TOKEN = 'demo-mock-monday-token';
 export const DEMO_MONDAY_BOARD_ID = 'demo-board-001';
 
 /**
- * As duas credenciais da Uappi são configuradas juntas (mesma convenção de
- * `settings.ts`: `configured` só é `true` quando ambas existem) — então a
- * decisão de "já configurado" também é conjunta. Se QUALQUER uma das duas já
- * tiver valor, tratamos a organização como já integrada e não tocamos em
- * nenhuma das duas, mesmo que a outra esteja nula (um estado parcial
- * inesperado não é este script quem deve corrigir).
+ * Decide quais integrações demo gravar SEM tocar no banco — puro, testável.
+ * Nunca replaneja um `kind` que já exista na organização (não sobrescreve
+ * configuração real). Só a COMMERCE leva segredos, cifrados como um único JSON
+ * (mesmo formato do `Integration.secrets` de produção).
  */
-export function shouldSetUappiCredentials(org: Pick<OrgIntegrationColumns, 'uappiApiKey' | 'uappiSecretKey'>): boolean {
-  return org.uappiApiKey === null && org.uappiSecretKey === null;
-}
-
-/** GA4 property id e dataset do BigQuery são independentes um do outro. */
-export function shouldSetField(value: string | null): boolean {
-  return value === null;
-}
-
-export interface CredentialWriteNote {
-  note: string;
-}
-
-export interface CredentialPlan {
-  /** Campos a gravar via `prisma.organization.update` — vazio quando nada precisa mudar. */
-  data: Record<string, string>;
-  /** Uma linha por decisão, para o resumo impresso no fim do script. */
-  notes: string[];
-}
-
-/**
- * Decide o que escrever na organização SEM tocar no banco — puro, testável.
- * `encrypt` isola a dependência de `SecretBox` (que exige uma chave hex de 64
- * caracteres) para este helper continuar chamável em teste sem construir uma
- * de verdade. Usado por toda credencial cifrada (Uappi, Play Console, App
- * Store Connect, Monday.com) — os identificadores públicos (ga4PropertyId,
- * mondayBoardId…) são gravados em claro.
- */
-export function planIntegrationWrite(
-  org: OrgIntegrationColumns,
-  encrypt: (plaintext: string) => string,
-): CredentialPlan {
-  const data: Record<string, string> = {};
-  const notes: string[] = [];
-
-  if (shouldSetUappiCredentials(org)) {
-    data.uappiApiKey = encrypt(DEMO_UAPPI_API_KEY);
-    data.uappiSecretKey = encrypt(DEMO_UAPPI_SECRET_KEY);
-    notes.push('Uappi: credenciais mock gravadas — o agendador de sync (scheduler.ts) só sincroniza ' +
-      'organizações com as duas colunas preenchidas, mesmo em modo mock.');
-  } else {
-    notes.push('Uappi: credenciais já configuradas — mantidas intactas, nada sobrescrito.');
-  }
-
-  if (shouldSetField(org.ga4PropertyId)) {
-    data.ga4PropertyId = DEMO_GA4_PROPERTY_ID;
-    notes.push(`GA4: ga4PropertyId mock gravado ("${DEMO_GA4_PROPERTY_ID}").`);
-  } else {
-    notes.push('GA4: ga4PropertyId já configurado — mantido.');
-  }
-
-  if (shouldSetField(org.ga4BigQueryDataset)) {
-    data.ga4BigQueryDataset = DEMO_GA4_BIGQUERY_DATASET;
-    notes.push(`Comportamento (BigQuery): ga4BigQueryDataset mock gravado ("${DEMO_GA4_BIGQUERY_DATASET}").`);
-  } else {
-    notes.push('Comportamento (BigQuery): ga4BigQueryDataset já configurado — mantido.');
-  }
-
-  if (shouldSetField(org.ga4AppPropertyId)) {
-    data.ga4AppPropertyId = DEMO_GA4_APP_PROPERTY_ID;
-    notes.push(`App (Firebase): ga4AppPropertyId mock gravado ("${DEMO_GA4_APP_PROPERTY_ID}").`);
-  } else {
-    notes.push('App (Firebase): ga4AppPropertyId já configurado — mantido.');
-  }
-
-  if (shouldSetField(org.playConsoleCredsJson)) {
-    data.playConsoleCredsJson = encrypt(DEMO_PLAY_CONSOLE_CREDS_JSON);
-    notes.push('Qualidade: credencial mock da Play Console gravada (cliente real ainda não implementado).');
-  } else {
-    notes.push('Qualidade: credencial da Play Console já configurada — mantida.');
-  }
-
-  if (shouldSetField(org.appStoreConnectKeyJson)) {
-    data.appStoreConnectKeyJson = encrypt(DEMO_APP_STORE_CONNECT_KEY_JSON);
-    notes.push('Qualidade: credencial mock da App Store Connect gravada (cliente real ainda não implementado).');
-  } else {
-    notes.push('Qualidade: credencial da App Store Connect já configurada — mantida.');
-  }
-
-  if (shouldSetField(org.mondayApiToken)) {
-    data.mondayApiToken = encrypt(DEMO_MONDAY_API_TOKEN);
-    notes.push('Sprint: token mock do Monday.com gravado (cliente real ainda não implementado).');
-  } else {
-    notes.push('Sprint: token do Monday.com já configurado — mantido.');
-  }
-
-  if (shouldSetField(org.mondayBoardId)) {
-    data.mondayBoardId = DEMO_MONDAY_BOARD_ID;
-    notes.push(`Sprint: mondayBoardId mock gravado ("${DEMO_MONDAY_BOARD_ID}").`);
-  } else {
-    notes.push('Sprint: mondayBoardId já configurado — mantido.');
-  }
-
-  return { data, notes };
+export function planDemoIntegrations(
+  existing: Array<{ kind: IntegrationKind }>,
+  box: SecretBox,
+): IntegrationWrite[] {
+  const taken = new Set(existing.map((i) => i.kind));
+  const all: IntegrationWrite[] = [
+    {
+      kind: 'COMMERCE',
+      provider: 'UAPPI',
+      config: {},
+      secrets: encryptSecrets(box, { apiKey: DEMO_UAPPI_API_KEY, secretKey: DEMO_UAPPI_SECRET_KEY }),
+    },
+    {
+      kind: 'WEB_ANALYTICS',
+      provider: 'GA4',
+      config: { propertyId: DEMO_GA4_PROPERTY_ID, bigQueryDataset: DEMO_GA4_BIGQUERY_DATASET },
+      secrets: null,
+    },
+    { kind: 'APP_ANALYTICS', provider: 'GA4', config: { propertyId: DEMO_GA4_APP_PROPERTY_ID }, secrets: null },
+    { kind: 'PLAY_STORE', provider: 'GOOGLE_PLAY', config: { packageName: 'com.demo.loja' }, secrets: null },
+    { kind: 'APP_STORE', provider: 'APP_STORE_CONNECT', config: { appId: 'demo-app' }, secrets: null },
+    { kind: 'SPRINT_BOARD', provider: 'MONDAY', config: { boardId: DEMO_MONDAY_BOARD_ID }, secrets: null },
+  ];
+  return all.filter((w) => !taken.has(w.kind));
 }
 
 /**

@@ -1,9 +1,7 @@
 import {
   SeedDemoRefusedError,
   assertMockMode,
-  shouldSetUappiCredentials,
-  shouldSetField,
-  planIntegrationWrite,
+  planDemoIntegrations,
   buildAttributionTouchData,
   formatCents,
   formatDateOnly,
@@ -12,14 +10,14 @@ import {
   DEMO_GA4_PROPERTY_ID,
   DEMO_GA4_BIGQUERY_DATASET,
   DEMO_GA4_APP_PROPERTY_ID,
-  DEMO_PLAY_CONSOLE_CREDS_JSON,
-  DEMO_APP_STORE_CONNECT_KEY_JSON,
-  DEMO_MONDAY_API_TOKEN,
   DEMO_MONDAY_BOARD_ID,
   TOUCH_LEAD_MINUTES,
-  type OrgIntegrationColumns,
   type OrderForTouch,
 } from '../lib/seed-demo.js';
+
+import { SecretBox } from '@center/secrets';
+import type { IntegrationKind } from '@center/entitlements';
+import { decryptSecrets } from '../../src/integrations/repository.js';
 
 describe('assertMockMode', () => {
   it('does nothing when mock mode is on', () => {
@@ -32,98 +30,41 @@ describe('assertMockMode', () => {
   });
 });
 
-describe('shouldSetUappiCredentials', () => {
-  it('is true when both credentials are null', () => {
-    expect(shouldSetUappiCredentials({ uappiApiKey: null, uappiSecretKey: null })).toBe(true);
-  });
+describe('planDemoIntegrations', () => {
+  const box = new SecretBox('a'.repeat(64));
 
-  it('is false when only the api key is already set', () => {
-    expect(shouldSetUappiCredentials({ uappiApiKey: 'v1.a.b.c', uappiSecretKey: null })).toBe(false);
-  });
-
-  it('is false when only the secret key is already set', () => {
-    expect(shouldSetUappiCredentials({ uappiApiKey: null, uappiSecretKey: 'v1.a.b.c' })).toBe(false);
-  });
-
-  it('is false when both are already set', () => {
-    expect(shouldSetUappiCredentials({ uappiApiKey: 'v1.a.b.c', uappiSecretKey: 'v1.d.e.f' })).toBe(false);
-  });
-});
-
-describe('shouldSetField', () => {
-  it('is true only for null', () => {
-    expect(shouldSetField(null)).toBe(true);
-    expect(shouldSetField('000000000')).toBe(false);
-    expect(shouldSetField('a-real-property-id')).toBe(false);
-  });
-});
-
-describe('planIntegrationWrite', () => {
-  const empty: OrgIntegrationColumns = {
-    uappiApiKey: null, uappiSecretKey: null, ga4PropertyId: null, ga4BigQueryDataset: null,
-    ga4AppPropertyId: null, playConsoleCredsJson: null, appStoreConnectKeyJson: null,
-    mondayApiToken: null, mondayBoardId: null,
-  };
-
-  it('plans to write every field on a fresh organization', () => {
-    const encrypt = jest.fn((plaintext: string) => `encrypted(${plaintext})`);
-    const plan = planIntegrationWrite(empty, encrypt);
-
-    expect(plan.data).toEqual({
-      uappiApiKey: `encrypted(${DEMO_UAPPI_API_KEY})`,
-      uappiSecretKey: `encrypted(${DEMO_UAPPI_SECRET_KEY})`,
-      ga4PropertyId: DEMO_GA4_PROPERTY_ID,
-      ga4BigQueryDataset: DEMO_GA4_BIGQUERY_DATASET,
-      ga4AppPropertyId: DEMO_GA4_APP_PROPERTY_ID,
-      playConsoleCredsJson: `encrypted(${DEMO_PLAY_CONSOLE_CREDS_JSON})`,
-      appStoreConnectKeyJson: `encrypted(${DEMO_APP_STORE_CONNECT_KEY_JSON})`,
-      mondayApiToken: `encrypted(${DEMO_MONDAY_API_TOKEN})`,
-      mondayBoardId: DEMO_MONDAY_BOARD_ID,
+  it('plans all six kinds when nothing exists', () => {
+    const plan = planDemoIntegrations([], box);
+    expect(plan.map((w) => w.kind).sort()).toEqual([
+      'APP_ANALYTICS', 'APP_STORE', 'COMMERCE', 'PLAY_STORE', 'SPRINT_BOARD', 'WEB_ANALYTICS',
+    ]);
+    const byKind = Object.fromEntries(plan.map((w) => [w.kind, w]));
+    expect(byKind.WEB_ANALYTICS?.config).toEqual({
+      propertyId: DEMO_GA4_PROPERTY_ID, bigQueryDataset: DEMO_GA4_BIGQUERY_DATASET,
     });
-    expect(encrypt).toHaveBeenCalledWith(DEMO_UAPPI_API_KEY);
-    expect(encrypt).toHaveBeenCalledWith(DEMO_UAPPI_SECRET_KEY);
-    expect(encrypt).toHaveBeenCalledWith(DEMO_PLAY_CONSOLE_CREDS_JSON);
-    expect(encrypt).toHaveBeenCalledWith(DEMO_APP_STORE_CONNECT_KEY_JSON);
-    expect(encrypt).toHaveBeenCalledWith(DEMO_MONDAY_API_TOKEN);
+    expect(byKind.APP_ANALYTICS?.config).toEqual({ propertyId: DEMO_GA4_APP_PROPERTY_ID });
+    expect(byKind.PLAY_STORE?.config).toEqual({ packageName: 'com.demo.loja' });
+    expect(byKind.APP_STORE?.config).toEqual({ appId: 'demo-app' });
+    expect(byKind.SPRINT_BOARD?.config).toEqual({ boardId: DEMO_MONDAY_BOARD_ID });
   });
 
-  it('never overwrites existing Uappi credentials — the core safety guarantee', () => {
-    const encrypt = jest.fn((plaintext: string) => `encrypted(${plaintext})`);
-    const org: OrgIntegrationColumns = {
-      ...empty, uappiApiKey: 'v1.real.real.real', uappiSecretKey: 'v1.real2.real2.real2',
-    };
-    const plan = planIntegrationWrite(org, encrypt);
-
-    expect(plan.data).not.toHaveProperty('uappiApiKey');
-    expect(plan.data).not.toHaveProperty('uappiSecretKey');
-    expect(encrypt).not.toHaveBeenCalledWith(DEMO_UAPPI_API_KEY);
-    expect(encrypt).not.toHaveBeenCalledWith(DEMO_UAPPI_SECRET_KEY);
-    expect(plan.notes.some((n) => /já configuradas/.test(n))).toBe(true);
+  it('never re-plans an existing kind', () => {
+    const plan = planDemoIntegrations([{ kind: 'COMMERCE' }, { kind: 'SPRINT_BOARD' }], box);
+    expect(plan.map((w) => w.kind)).not.toContain('COMMERCE');
+    expect(plan.map((w) => w.kind)).not.toContain('SPRINT_BOARD');
+    expect(plan).toHaveLength(4);
+    expect(planDemoIntegrations(
+      ['COMMERCE', 'WEB_ANALYTICS', 'APP_ANALYTICS', 'PLAY_STORE', 'APP_STORE', 'SPRINT_BOARD']
+        .map((kind) => ({ kind: kind as IntegrationKind })), box,
+    )).toEqual([]);
   });
 
-  it('never overwrites an existing ga4PropertyId', () => {
-    const org: OrgIntegrationColumns = { ...empty, ga4PropertyId: 'real-property-123' };
-    const plan = planIntegrationWrite(org, (v) => v);
-    expect(plan.data).not.toHaveProperty('ga4PropertyId');
-  });
-
-  it('never overwrites an existing ga4BigQueryDataset', () => {
-    const org: OrgIntegrationColumns = { ...empty, ga4BigQueryDataset: 'real_dataset' };
-    const plan = planIntegrationWrite(org, (v) => v);
-    expect(plan.data).not.toHaveProperty('ga4BigQueryDataset');
-  });
-
-  it('plans nothing at all when the organization is already fully configured', () => {
-    const org: OrgIntegrationColumns = {
-      uappiApiKey: 'v1.a.b.c', uappiSecretKey: 'v1.d.e.f',
-      ga4PropertyId: 'real-property-123', ga4BigQueryDataset: 'real_dataset',
-      ga4AppPropertyId: 'real-app-property-123',
-      playConsoleCredsJson: 'v1.real.real.real', appStoreConnectKeyJson: 'v1.real.real.real',
-      mondayApiToken: 'v1.real.real.real', mondayBoardId: 'real-board-123',
-    };
-    const plan = planIntegrationWrite(org, (v) => v);
-    expect(plan.data).toEqual({});
-    expect(plan.notes).toHaveLength(8);
+  it('commerce secrets decrypt to the demo keys', () => {
+    const commerce = planDemoIntegrations([], box).find((w) => w.kind === 'COMMERCE')!;
+    expect(commerce.provider).toBe('UAPPI');
+    expect(decryptSecrets(box, commerce.secrets)).toEqual({
+      apiKey: DEMO_UAPPI_API_KEY, secretKey: DEMO_UAPPI_SECRET_KEY,
+    });
   });
 });
 

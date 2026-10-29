@@ -11,10 +11,10 @@ const pseudonymizer = new Pseudonymizer(config.piiPepper);
 const secretBox = new SecretBox(config.credentialsEncryptionKey);
 
 // Cliente HTTP (ou mock, com MOCK_EXTERNAL_APIS=true) é construído dentro do conector.
-const connector = createConnectorRegistry({
+const connectors = createConnectorRegistry({
   uappiBaseUrl: config.uappiBaseUrl,
   mock: config.mockExternalApis,
-}).get('UAPPI');
+});
 
 let running = false;
 
@@ -28,7 +28,7 @@ async function tick(): Promise<void> {
   const startedAt = Date.now();
   try {
     const report = await syncAllOrganizations({
-      prisma, config, pseudonymizer, secretBox, connector,
+      prisma, config, pseudonymizer, secretBox, connectors,
       logger: (message, meta) => console.log(message, meta ?? ''),
     });
     console.log(`ciclo concluído em ${Date.now() - startedAt}ms`, report);
