@@ -1,15 +1,12 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import '../authz/principal.js';
 
 export interface AuthPayload {
   userId: string;
   organizationId: string;
   role: 'ADMIN' | 'MEMBER';
-}
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    auth: AuthPayload;
-  }
+  /** Presente só em sessão de visualização de operador. */
+  viewedBy?: string;
 }
 
 declare module '@fastify/jwt' {
@@ -19,25 +16,7 @@ declare module '@fastify/jwt' {
   }
 }
 
-/**
- * preHandler: valida o Bearer token e popula `request.auth`.
- *
- * `jwtVerify` retorna o payload decodificado com `iat`/`exp` inclusos, que
- * não fazem parte de `AuthPayload`. Reconstruímos o objeto aqui para que
- * `request.auth` seja sempre o formato limpo — na origem, não em cada rota
- * que o lê — evitando que esses claims vazem em qualquer resposta futura
- * que retorne ou espalhe `request.auth` diretamente.
- */
-export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
-  try {
-    const decoded = await request.jwtVerify<AuthPayload>();
-    request.auth = { userId: decoded.userId, organizationId: decoded.organizationId, role: decoded.role };
-  } catch {
-    await reply.status(401).send({ error: 'unauthorized', message: 'token ausente ou inválido' });
-  }
-}
-
-/** Roda depois de `requireAuth`. Barra qualquer papel que não seja ADMIN. */
+/** Roda depois de `app.authenticate`. Barra qualquer papel que não seja ADMIN. */
 export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (request.auth.role !== 'ADMIN') {
     await reply.status(403).send({ error: 'forbidden', message: 'requer papel de administrador' });

@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { GranularitySchema, IsoDateSchema } from '@center/shared';
 import { correlateMetrics } from '@center/mcp-core';
-import { requireAuth } from '../auth/jwt.js';
 import { resolveTenant } from '../tenant.js';
 import { analyzeAppVersionImpact } from '../analysis/app-version-impact.js';
 import { badRequest, upstreamError } from './metrics.js';
@@ -30,7 +29,7 @@ function today(): string {
 }
 
 export async function registerAnalysisRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
-  app.post('/api/analysis/correlate', { preHandler: requireAuth }, async (request, reply) => {
+  app.post('/api/analysis/correlate', { preHandler: app.authenticate }, async (request, reply) => {
     const parsed = CorrelateBodySchema.safeParse(request.body);
     if (!parsed.success) return badRequest(reply, parsed.error.issues[0]?.message ?? 'corpo inválido');
 
@@ -48,7 +47,7 @@ export async function registerAnalysisRoutes(app: FastifyInstance, deps: AppDeps
     }
   });
 
-  app.post('/api/analysis/app-version-impact', { preHandler: requireAuth }, async (request, reply) => {
+  app.post('/api/analysis/app-version-impact', { preHandler: app.authenticate }, async (request, reply) => {
     const parsed = VersionImpactBodySchema.safeParse(request.body);
     if (!parsed.success) return badRequest(reply, parsed.error.issues[0]?.message ?? 'corpo inválido');
 

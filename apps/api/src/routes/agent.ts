@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireAuth } from '../auth/jwt.js';
 import { resolveTenant } from '../tenant.js';
 import { runAgent } from '../agent/agent.js';
 import { appendExchange, loadUserConversationHistory } from '../agent/memory.js';
@@ -21,14 +20,14 @@ function todayInSaoPaulo(): string {
  * vinculado — nenhum webhook público, nenhuma credencial da Meta envolvida.
  */
 export async function registerAgentRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
-  app.get('/api/agent/conversation', { preHandler: requireAuth }, async (request, reply) => {
+  app.get('/api/agent/conversation', { preHandler: app.authenticate }, async (request, reply) => {
     const conversation = await loadUserConversationHistory(
       deps.prisma, request.auth.userId, request.auth.organizationId,
     );
     return reply.send({ conversationId: conversation.conversationId, messages: conversation.history });
   });
 
-  app.post('/api/agent/ask', { preHandler: requireAuth }, async (request, reply) => {
+  app.post('/api/agent/ask', { preHandler: app.authenticate }, async (request, reply) => {
     const parsed = AskBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'bad_request', message: parsed.error.issues[0]?.message ?? 'corpo inválido' });

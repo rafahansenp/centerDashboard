@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { GranularitySchema, IsoDateSchema, MetricSourceSchema, type MetricQuery, type MetricSource } from '@center/shared';
-import { requireAuth } from '../auth/jwt.js';
 import { resolveTenant } from '../tenant.js';
 import { assertRange, assertRangesInBody, BadRequestError } from '../range.js';
 import type { AppDeps } from '../deps.js';
@@ -76,7 +75,7 @@ export function upstreamError(reply: FastifyReply, error: unknown) {
 }
 
 export async function registerMetricRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
-  app.get('/api/metrics/catalog', { preHandler: requireAuth }, async (_request, reply) => {
+  app.get('/api/metrics/catalog', { preHandler: app.authenticate }, async (_request, reply) => {
     try {
       return reply.send({ metrics: await deps.gateway.listMetrics() });
     } catch (error) {
@@ -84,7 +83,7 @@ export async function registerMetricRoutes(app: FastifyInstance, deps: AppDeps):
     }
   });
 
-  app.post('/api/metrics/query', { preHandler: requireAuth }, async (request, reply) => {
+  app.post('/api/metrics/query', { preHandler: app.authenticate }, async (request, reply) => {
     const parsed = QueryBodySchema.safeParse(request.body);
     if (!parsed.success) return badRequest(reply, parsed.error.issues[0]?.message ?? 'corpo inválido');
 
@@ -99,7 +98,7 @@ export async function registerMetricRoutes(app: FastifyInstance, deps: AppDeps):
     }
   });
 
-  app.post('/api/metrics/batch', { preHandler: requireAuth }, async (request, reply) => {
+  app.post('/api/metrics/batch', { preHandler: app.authenticate }, async (request, reply) => {
     const parsed = BatchBodySchema.safeParse(request.body);
     if (!parsed.success) {
       return badRequest(reply, `queries precisa ter entre 1 e ${MAX_BATCH_SIZE} itens`);
@@ -118,7 +117,7 @@ export async function registerMetricRoutes(app: FastifyInstance, deps: AppDeps):
 
   app.post<{ Params: { source: string; name: string } }>(
     '/api/tools/:source/:name',
-    { preHandler: requireAuth },
+    { preHandler: app.authenticate },
     async (request, reply) => {
       const source = MetricSourceSchema.safeParse(request.params.source);
       if (!source.success) {

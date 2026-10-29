@@ -9,18 +9,19 @@ import { testConfig } from './helpers/config.js';
 const validUser = {
   id: 'user_1', email: 'ana@example.com', name: 'Ana',
   role: 'ADMIN' as const, organizationId: 'org_1', passwordHash: '',
+  active: true, mustChangePassword: false,
 };
 
-async function buildTestServer(userRow: unknown) {
+let lastPrisma: PrismaClient;
+
+async function buildTestServer(userRow: unknown, orgStatus: 'ACTIVE' | 'SUSPENDED' = 'ACTIVE') {
   const prisma = {
-    user: { findUnique: jest.fn(async () => userRow) },
+    user: { findUnique: jest.fn(async () => userRow), update: jest.fn(async () => userRow) },
     organization: {
-      findUnique: jest.fn(async () => ({
-        id: 'org_1', ga4PropertyId: '111', ga4BigQueryDataset: null,
-        uappiApiKey: null, uappiSecretKey: null,
-      })),
+      findUnique: jest.fn(async () => ({ id: 'org_1', status: orgStatus })),
     },
   } as unknown as PrismaClient;
+  lastPrisma = prisma;
 
   return buildServer({
     config: testConfig,
@@ -152,6 +153,77 @@ describe('GET /auth/me', () => {
       headers: { authorization: `Bearer ${login.json().token}` },
     });
     expect(response.json()).toEqual({ userId: 'user_1', organizationId: 'org_1', role: 'ADMIN' });
+    await app.close();
+  });
+});
+
+describe('login state checks', () => {
+  it('deactivated user login gets the same body as a wrong password', async () => {
+    const passwordHash = await hashPassword('segredo123');
+    const inactiveApp = await buildTestServer({ ...validUser, passwordHash, active: false });
+    const inactive = await inactiveApp.inject({
+      method: 'POST', url: '/auth/login', payload: { email: 'ana@example.com', password: 'segredo123' },
+    });
+    await inactiveApp.close();
+    const wrongApp = await buildTestServer({ ...validUser, passwordHash });
+    const wrong = await wrongApp.inject({
+      method: 'POST', url: '/auth/login', payload: { email: 'ana@example.com', password: 'errada' },
+    });
+    await wrongApp.close();
+    expect(inactive.statusCode).toBe(401);
+    expect(inactive.json()).toEqual(wrong.json());
+  });
+
+  it('suspended organization login returns 403 organization_suspended', async () => {
+    const app = await buildTestServer({ ...validUser, passwordHash: await hashPassword('segredo123') }, 'SUSPENDED');
+    const res = await app.inject({
+      method: 'POST', url: '/auth/login', payload: { email: 'ana@example.com', password: 'segredo123' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe('organization_suspended');
+    await app.close();
+  });
+});
+
+describe('POST /auth/password', () => {
+  async function loggedIn(mustChangePassword = false) {
+    const app = await buildTestServer({
+      ...validUser, passwordHash: await hashPassword('segredo123'), mustChangePassword,
+    });
+    const login = await app.inject({
+      method: 'POST', url: '/auth/login', payload: { email: 'ana@example.com', password: 'segredo123' },
+    });
+    return { app, headers: { authorization: `Bearer ${login.json().token}` } };
+  }
+
+  it('rejects a wrong current password (401) and a short new one (400)', async () => {
+    const { app, headers } = await loggedIn();
+    const wrong = await app.inject({
+      method: 'POST', url: '/auth/password', headers,
+      payload: { currentPassword: 'errada', newPassword: 'uma-senha-bem-longa' },
+    });
+    expect(wrong.statusCode).toBe(401);
+    const short = await app.inject({
+      method: 'POST', url: '/auth/password', headers,
+      payload: { currentPassword: 'segredo123', newPassword: 'curta' },
+    });
+    expect(short.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('clears mustChangePassword', async () => {
+    const { app, headers } = await loggedIn(true);
+    const res = await app.inject({
+      method: 'POST', url: '/auth/password', headers,
+      payload: { currentPassword: 'segredo123', newPassword: 'uma-senha-bem-longa' },
+    });
+    expect(res.statusCode).toBe(204);
+    const update = lastPrisma.user.update as jest.Mock;
+    expect(update).toHaveBeenCalledTimes(1);
+    const arg = update.mock.calls[0]![0];
+    expect(arg.where).toEqual({ id: 'user_1' });
+    expect(arg.data.mustChangePassword).toBe(false);
+    expect(arg.data.passwordHash).toMatch(/^scrypt\$/);
     await app.close();
   });
 });

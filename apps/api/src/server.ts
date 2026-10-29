@@ -6,6 +6,7 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import type { AppDeps } from './deps.js';
+import { makeAuthenticate } from './authz/principal.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerMetricRoutes } from './routes/metrics.js';
 import { registerAnalysisRoutes } from './routes/analysis.js';
@@ -67,7 +68,14 @@ export async function buildServer(deps: AppDeps, opts: { webRoot?: string } = {}
   });
 
   await app.register(cors, { origin: true, credentials: true });
-  await app.register(jwt, { secret: deps.config.jwtSecret });
+  // `aud` separa os tokens do cliente dos do operador (backoffice).
+  await app.register(jwt, {
+    secret: deps.config.jwtSecret,
+    sign: { aud: 'client' },
+    // fast-jwt ignora allowedAud quando o claim falta; requiredClaims exige a presença.
+    verify: { allowedAud: 'client', requiredClaims: ['aud'] },
+  });
+  app.decorate('authenticate', makeAuthenticate(deps.prisma));
   await app.register(rateLimit, {
     global: true, max: 300, timeWindow: '1 minute',
     // O webhook do WhatsApp tem a assinatura HMAC como sua ÚNICA fronteira de

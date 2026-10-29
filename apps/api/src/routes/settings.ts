@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAdmin, requireAuth } from '../auth/jwt.js';
+import { requireAdmin } from '../auth/jwt.js';
 import type { AppDeps } from '../deps.js';
 
 /**
@@ -9,7 +9,7 @@ import type { AppDeps } from '../deps.js';
 export async function registerSettingsRoutes(app: FastifyInstance, deps: AppDeps): Promise<void> {
   app.get(
     '/api/settings/integrations',
-    { preHandler: [requireAuth, requireAdmin] },
+    { preHandler: [app.authenticate, requireAdmin] },
     async (request, reply) => {
       const organizationId = request.auth.organizationId;
       const rows = await deps.prisma.integration.findMany({

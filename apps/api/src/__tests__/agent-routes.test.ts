@@ -29,11 +29,12 @@ async function setup() {
       findUnique: jest.fn(async () => ({
         id: 'user_1', email: 'ana@example.com', name: 'Ana', role: 'ADMIN' as const,
         organizationId: 'org_1', passwordHash: await hashPassword('segredo123'),
+        active: true, mustChangePassword: false,
       })),
     },
     organization: {
       findUnique: jest.fn(async () => ({
-        id: 'org_1',
+        id: 'org_1', status: 'ACTIVE',
       })),
     },
     integration: { findMany: jest.fn(async () => []) },
