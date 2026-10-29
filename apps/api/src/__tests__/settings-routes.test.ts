@@ -16,7 +16,7 @@ function buildOrgRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-async function setup(role: 'ADMIN' | 'VIEWER', orgRow: Record<string, unknown>) {
+async function setup(role: 'ADMIN' | 'MEMBER', orgRow: Record<string, unknown>) {
   const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...orgRow, ...data }));
   const prisma = {
     user: {
@@ -80,16 +80,16 @@ describe('GET /api/settings/integrations', () => {
     await app.close();
   });
 
-  it('is readable by a VIEWER — seeing what is configured is not sensitive', async () => {
-    const { app, token } = await setup('VIEWER', buildOrgRow());
+  it('is readable by a MEMBER — seeing what is configured is not sensitive', async () => {
+    const { app, token } = await setup('MEMBER', buildOrgRow());
     expect((await app.inject({ method: 'GET', url: '/api/settings/integrations', headers: auth(token) })).statusCode).toBe(200);
     await app.close();
   });
 });
 
 describe('PUT /api/settings/integrations', () => {
-  it('requires ADMIN — a VIEWER gets 403', async () => {
-    const { app, token } = await setup('VIEWER', buildOrgRow());
+  it('requires ADMIN — a MEMBER gets 403', async () => {
+    const { app, token } = await setup('MEMBER', buildOrgRow());
     const response = await app.inject({
       method: 'PUT', url: '/api/settings/integrations', headers: auth(token),
       payload: { ga4PropertyId: '111' },

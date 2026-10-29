@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 export interface AuthPayload {
   userId: string;
   organizationId: string;
-  role: 'ADMIN' | 'VIEWER';
+  role: 'ADMIN' | 'MEMBER';
 }
 
 declare module 'fastify' {

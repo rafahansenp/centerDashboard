@@ -9,7 +9,47 @@ datasource db {
 
 enum Role {
   ADMIN
-  VIEWER
+  MEMBER
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ModuleStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ModuleOrigin {
+  MANUAL
+  PLAN
+  BILLING
+}
+
+enum IntegrationKind {
+  COMMERCE
+  WEB_ANALYTICS
+  APP_ANALYTICS
+  PLAY_STORE
+  APP_STORE
+  SPRINT_BOARD
+}
+
+enum IntegrationProvider {
+  UAPPI
+  GA4
+  GOOGLE_PLAY
+  APP_STORE_CONNECT
+  MONDAY
+}
+
+enum IntegrationStatus {
+  PENDING
+  OK
+  ERROR
+  DISABLED
 }
 
 enum MessageRole {
@@ -32,14 +72,14 @@ enum OrderStatusGroup {
 }
 
 model Organization {
-  id                String   @id @default(cuid())
-  name              String
-  uappiApiKey       String?
-  uappiSecretKey    String?
-  ga4PropertyId     String?
-  ga4BigQueryDataset String?
+  id                     String             @id @default(cuid())
+  name                   String
+  uappiApiKey            String?
+  uappiSecretKey         String?
+  ga4PropertyId          String?
+  ga4BigQueryDataset     String?
   /// Property GA4/Firebase do app mobile (separada da propriedade web em ga4PropertyId).
-  ga4AppPropertyId  String?
+  ga4AppPropertyId       String?
   /// Credenciais criptografadas (SecretBox) — nunca lidas fora da camada de sync.
   playConsoleCredsJson   String?
   appStoreConnectKeyJson String?
@@ -47,9 +87,14 @@ model Organization {
   /// Identificador público, como ga4PropertyId — não é segredo.
   mondayBoardId          String?
   /// Sobrescreve o mapa padrão de status da Uappi: { "<idStatus>": "PAID", ... }
-  statusMapping     Json?
-  createdAt         DateTime @default(now())
+  statusMapping          Json?
+  createdAt              DateTime           @default(now())
+  status                 OrganizationStatus @default(ACTIVE)
+  /// Opcional até a Task 21 (preenchido para todos os clientes).
+  slug                   String?            @unique
 
+  modules            OrganizationModule[]
+  integrations       Integration[]
   users              User[]
   whatsappIdentities WhatsAppIdentity[]
   conversations      Conversation[]
@@ -66,22 +111,26 @@ model Organization {
 }
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  passwordHash   String
-  name           String
-  role           Role     @default(VIEWER)
-  organizationId String
-  createdAt      DateTime @default(now())
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  passwordHash       String
+  name               String
+  role               Role     @default(MEMBER)
+  organizationId     String
+  mustChangePassword Boolean  @default(false)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
 
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   whatsappIdentity WhatsAppIdentity?
   linkCodes        LinkCode[]
   conversations    Conversation[]
+  moduleAccess     UserModuleAccess[]
 
   @@index([organizationId])
 }
 
+/// Não usado no MVP (WhatsApp fora do escopo desde 2026-10-29).
 model WhatsAppIdentity {
   id             String    @id @default(cuid())
   phoneE164      String    @unique
@@ -97,6 +146,7 @@ model WhatsAppIdentity {
   @@index([organizationId])
 }
 
+/// Não usado no MVP (WhatsApp fora do escopo desde 2026-10-29).
 model LinkCode {
   code      String    @id
   userId    String
@@ -135,6 +185,9 @@ model Message {
   conversationId String
   role           MessageRole
   content        String      @db.Text
+  model          String?
+  inputTokens    Int?
+  outputTokens   Int?
   createdAt      DateTime    @default(now())
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -160,9 +213,99 @@ model ToolCallLog {
   @@index([organizationId, createdAt])
 }
 
+/// Não usado no MVP (WhatsApp fora do escopo desde 2026-10-29).
 model ProcessedWebhookEvent {
   wamid       String   @id
   processedAt DateTime @default(now())
+}
+
+// ─────────────────────────── MULTI-TENANT ───────────────────────────
+
+/// Operador da plataforma (backoffice). Separado de User de propósito.
+model PlatformOperator {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  /// Segredo TOTP, cifrado.
+  totpSecret    String?
+  totpEnabledAt DateTime?
+  active        Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  auditLogs OperatorAuditLog[]
+}
+
+/// Contrato de um módulo para uma organização.
+model OrganizationModule {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  moduleKey           String
+  status              ModuleStatus @default(ACTIVE)
+  startsAt            DateTime     @default(now())
+  endsAt              DateTime?
+  origin              ModuleOrigin @default(MANUAL)
+  updatedByOperatorId String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, moduleKey])
+}
+
+/// Módulo liberado a um usuário MEMBER.
+model UserModuleAccess {
+  id              String   @id @default(cuid())
+  userId          String
+  moduleKey       String
+  grantedByUserId String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleKey])
+}
+
+/// Integração por organização e tipo. Credenciais só em `secrets` (cifrado).
+model Integration {
+  id               String              @id @default(cuid())
+  organizationId   String
+  kind             IntegrationKind
+  provider         IntegrationProvider
+  config           Json                @default("{}")
+  secrets          String?
+  secretsUpdatedAt DateTime?
+  status           IntegrationStatus   @default(PENDING)
+  lastCheckAt      DateTime?
+  lastError        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, kind])
+}
+
+/// Auditoria das ações de operador. Somente inserção (trigger no banco).
+model OperatorAuditLog {
+  id             String   @id @default(cuid())
+  operatorId     String
+  action         String
+  /// Sem FK, para sobreviver à exclusão do cliente.
+  organizationId String?
+  targetType     String?
+  targetId       String?
+  metadata       Json     @default("{}")
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  operator PlatformOperator @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([operatorId, createdAt])
 }
 
 // ─────────────────────────── READ MODEL DE E-COMMERCE ───────────────────────────
@@ -214,17 +357,17 @@ model CommerceOrder {
 }
 
 model CommerceOrderItem {
-  id             String @id @default(cuid())
-  organizationId String
-  orderId        String
-  sku            String
-  productName    String
-  categoryName   String?
-  quantity       Int
-  unitPriceCents Int
+  id              String   @id @default(cuid())
+  organizationId  String
+  orderId         String
+  sku             String
+  productName     String
+  categoryName    String?
+  quantity        Int
+  unitPriceCents  Int
   totalPriceCents Int
   /// Desnormalizado do pedido: permite agregar por período sem join.
-  emittedAt      DateTime
+  emittedAt       DateTime
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   order        CommerceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -235,17 +378,17 @@ model CommerceOrderItem {
 }
 
 model CommerceCustomer {
-  id             String    @id @default(cuid())
-  organizationId String
+  id              String    @id @default(cuid())
+  organizationId  String
   /// idCliente da Uappi. Não é dado pessoal.
-  externalId     String
+  externalId      String
   /// HMAC. Nunca o e-mail ou documento em claro.
-  emailHash      String?
-  documentHash   String?
-  firstOrderAt   DateTime?
-  lastOrderAt    DateTime?
-  ordersCount    Int       @default(0)
-  totalSpentCents Int      @default(0)
+  emailHash       String?
+  documentHash    String?
+  firstOrderAt    DateTime?
+  lastOrderAt     DateTime?
+  ordersCount     Int       @default(0)
+  totalSpentCents Int       @default(0)
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orders       CommerceOrder[]

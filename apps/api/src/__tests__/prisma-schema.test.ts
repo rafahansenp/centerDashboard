@@ -57,4 +57,27 @@ describe('prisma schema invariants', () => {
     expect(modelBody('CommerceOrder')).toMatch(/@@index\(\[organizationId, statusGroup, emittedAt\]\)/);
     expect(modelBody('CommerceOrderItem')).toMatch(/@@index\(\[organizationId, sku, emittedAt\]\)/);
   });
+
+  it('keeps one integration per organization and kind', () => {
+    expect(modelBody('Integration')).toMatch(/@@unique\(\[organizationId, kind\]\)/);
+  });
+
+  it('keeps one contract per organization and module', () => {
+    expect(modelBody('OrganizationModule')).toMatch(/@@unique\(\[organizationId, moduleKey\]\)/);
+  });
+
+  it('Role enum has MEMBER and no VIEWER', () => {
+    const body = schema.match(/enum Role \{[\s\S]*?\n\}/)?.[0] ?? '';
+    expect(body).toMatch(/\bMEMBER\b/);
+    expect(body).not.toMatch(/VIEWER/);
+  });
+
+  it('platform operators are a separate model and User has no operator flag', () => {
+    expect(schema).toMatch(/model PlatformOperator \{/);
+    expect(modelBody('User')).not.toMatch(/superadmin|operator|isPlatform/i);
+  });
+
+  it('Integration has no plaintext credential columns', () => {
+    expect(modelBody('Integration')).not.toMatch(/apiKey|secretKey|token\s+String/i);
+  });
 });
