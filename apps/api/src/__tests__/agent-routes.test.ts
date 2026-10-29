@@ -33,10 +33,10 @@ async function setup() {
     },
     organization: {
       findUnique: jest.fn(async () => ({
-        id: 'org_1', ga4PropertyId: null, ga4BigQueryDataset: null, ga4AppPropertyId: null,
-        uappiApiKey: null, uappiSecretKey: null,
+        id: 'org_1',
       })),
     },
+    integration: { findMany: jest.fn(async () => []) },
     conversation: {
       findFirst: jest.fn(async () => conversationRow),
       create: jest.fn(async () => conversationRow),

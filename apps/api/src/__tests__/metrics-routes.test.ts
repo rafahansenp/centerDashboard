@@ -32,9 +32,13 @@ async function setup(organizationId = 'org_1') {
     },
     organization: {
       findUnique: jest.fn(async () => ({
-        id: organizationId, ga4PropertyId: `prop_${organizationId}`,
-        ga4BigQueryDataset: null, uappiApiKey: null, uappiSecretKey: null,
+        id: organizationId,
       })),
+    },
+    integration: {
+      findMany: jest.fn(async () => [
+        { kind: 'WEB_ANALYTICS', status: 'OK', config: { propertyId: `prop_${organizationId}` } },
+      ]),
     },
   } as unknown as PrismaClient;
 

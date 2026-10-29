@@ -71,16 +71,19 @@ export interface AgentMessageView { role: 'user' | 'assistant'; content: string 
 export interface AgentConversationView { conversationId: string; messages: AgentMessageView[] }
 export interface AgentAskResult { conversationId: string; reply: string }
 
-export interface IntegrationsView {
-  uappi: { configured: boolean };
-  ga4: { propertyId: string | null; bigQueryDataset: string | null };
+export type IntegrationKind =
+  | 'COMMERCE' | 'WEB_ANALYTICS' | 'APP_ANALYTICS' | 'PLAY_STORE' | 'APP_STORE' | 'SPRINT_BOARD';
+export type IntegrationStatus = 'PENDING' | 'OK' | 'ERROR' | 'DISABLED';
+
+export interface IntegrationStatusItem {
+  kind: IntegrationKind;
+  provider: string;
+  status: IntegrationStatus;
+  lastSyncedAt: string | null;
 }
 
-export interface IntegrationsUpdate {
-  uappiApiKey?: string;
-  uappiSecretKey?: string;
-  ga4PropertyId?: string;
-  ga4BigQueryDataset?: string;
+export interface IntegrationsView {
+  integrations: IntegrationStatusItem[];
 }
 
 export class ApiError extends Error {
@@ -170,9 +173,5 @@ export const apiClient = {
 
   getIntegrations(): Promise<IntegrationsView> {
     return request('/api/settings/integrations');
-  },
-
-  updateIntegrations(patch: IntegrationsUpdate): Promise<IntegrationsView> {
-    return request('/api/settings/integrations', { method: 'PUT', body: JSON.stringify(patch) });
   },
 };

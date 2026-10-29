@@ -24,10 +24,10 @@ function buildDeps(identity: unknown) {
   const sendText = jest.fn(async () => {});
   const prisma = {
     whatsAppIdentity: { findUnique: jest.fn(async () => identity) },
-    organization: { findUnique: jest.fn(async () => ({
-      id: 'org_1', ga4PropertyId: '111', ga4BigQueryDataset: null,
-      uappiApiKey: null, uappiSecretKey: null,
-    })) },
+    organization: { findUnique: jest.fn(async () => ({ id: 'org_1' })) },
+    integration: { findMany: jest.fn(async () => [
+      { kind: 'WEB_ANALYTICS', status: 'OK', config: { propertyId: '111' } },
+    ]) },
     conversation: { findFirst: jest.fn(async () => ({ id: 'conv_1' })), update: jest.fn(async () => ({})) },
     message: { findMany: jest.fn(async () => []), create: jest.fn(async () => ({ id: 'msg_1' })) },
     toolCallLog: { createMany: jest.fn(async () => ({ count: 0 })) },
